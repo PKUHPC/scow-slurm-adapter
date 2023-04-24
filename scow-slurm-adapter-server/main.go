@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"math"
 	"net"
 	config "scow-slurm-adapter-server/config"
@@ -853,130 +852,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.GetJobsResponse, error) {
 	// 连接数据库
-	var (
-		user             string
-		account          string
-		state            string
-		startTime        *timestamppb.Timestamp
-		endTime          *timestamppb.Timestamp
-		page             uint32
-		pageSize         uint64
-		jobSqlConfig     string
-		jobId            uint32
-		jobName          string
-		jobAccount       string
-		partition        string
-		idQos            int
-		stateInit        int
-		cpusReq          int32
-		memReq           int64
-		timeLimitMinutes int64
-		submitTime       int64
-		nodeList         string
-		workingDirectory string
-		qosName          string
-		stateString      string
-		jobInfo          []*pb.JobInfo
-	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := tools.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
-	log.Println(clusterName, db)
-	// 这里的fields会传些啥
-	if in.PageInfo != nil && in.Filter != nil {
-		page = in.PageInfo.Page
-		pageSize = in.PageInfo.PageSize
-		if in.Filter.User != nil {
-			user = *in.Filter.User
-		}
-		if in.Filter.Account != nil {
-			account = *in.Filter.Account
-		}
-		if in.Filter.State != nil {
-			state = *in.Filter.State
-		}
-		if in.Filter.EndTime != nil {
-			// 转化为int型才能查
-			startTime = in.Filter.EndTime.StartTime
-			endTime = in.Filter.EndTime.EndTime
-		}
-		jobSqlConfig = fmt.Sprintf("")
-	} else if in.PageInfo != nil && in.Filter == nil {
-		page = in.PageInfo.Page
-		pageSize = in.PageInfo.PageSize
-		// limit 对应的是pageSize offset对应的是page
-		// 做分页的操作
-		// size := page * (page - 1) * uint32(pageSize)
-		page1 := pageSize
-		pageSize = pageSize * uint64(page)
-
-		jobSqlConfig = fmt.Sprintf("select id_job,job_name,account,partition,id_qos,state,cpus_req,mem_req,nodelist,timelimit,time_submit,work_dir from %s_job_table limit %d offset %d", clusterName, page1, pageSize)
-		log.Println(jobSqlConfig)
-	} else if in.PageInfo == nil && in.Filter != nil {
-		if in.Filter.User != nil {
-			user = *in.Filter.User
-		}
-		if in.Filter.Account != nil {
-			account = *in.Filter.Account
-		}
-		if in.Filter.State != nil {
-			state = *in.Filter.State
-		}
-		if in.Filter.EndTime != nil {
-			// 转化为int型才能查
-			startTime = in.Filter.EndTime.StartTime
-			endTime = in.Filter.EndTime.EndTime
-			log.Println(startTime, endTime)
-		}
-		jobSqlConfig = fmt.Sprintf("")
-	} else {
-		jobSqlConfig = fmt.Sprintf("select id_job,job_name,account,partition,id_qos,state,cpus_req,mem_req,nodelist,timelimit,time_submit,work_dir from %s_job_table", clusterName)
-	}
-	rows, err := db.Query(jobSqlConfig)
-	if err != nil {
-		log.Println(err)
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
-	}
-	defer rows.Close()
-	for rows.Next() {
-		err := rows.Scan(&jobId, &jobName, &jobAccount, &partition, &idQos, &stateInit, &cpusReq, &memReq, &nodeList, &timeLimitMinutes, &submitTime, &workingDirectory)
-		if err != nil {
-			return nil, status.New(codes.Internal, "The job query failed.").Err()
-		}
-		//idQos 转化为Qos name
-		qosSqlConfig := fmt.Sprintf("select name in qos_table where id = %d", idQos)
-		db.QueryRow(qosSqlConfig).Scan(&qosName)
-		stateString = tools.ChangeState(stateInit)
-		submitTimeChangeType := &timestamppb.Timestamp{Seconds: int64(time.Unix(submitTime, 0).Unix())}
-		jobInfo = append(jobInfo, &pb.JobInfo{
-			JobId:            jobId,
-			Name:             jobName,
-			Account:          account,
-			Partition:        partition,
-			Qos:              qosName,
-			State:            stateString,
-			CpusReq:          cpusReq,
-			MemReqMb:         memReq,
-			TimeLimitMinutes: timeLimitMinutes,
-			SubmitTime:       submitTimeChangeType,
-			WorkingDirectory: workingDirectory,
-			NodeList:         &nodeList,
-		})
-	}
-	err = rows.Err()
-	if err != nil {
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
-	}
-
-	log.Println(qosName, stateString)
-	log.Println(user, account, state, startTime, endTime, page, pageSize)
-
-	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
+	return &pb.GetJobsResponse{}, nil
 }
 
 // 提交作业的函数
