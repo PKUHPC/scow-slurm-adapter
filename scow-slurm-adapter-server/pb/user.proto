@@ -1,0 +1,103 @@
+syntax = "proto3"; // 版本声明，使用Protocol Buffers v3版本
+
+option go_package = "scow-slurm-adapter-server/pb;pb"; // 指定编译生成的文件目录，也可以指定golang包名
+
+package pb; // 默认包名
+
+// user inteface define 
+message AddUserToAccountRequest {
+    string user_id = 1;
+    string account_name = 2;
+}
+  
+message AddUserToAccountResponse {
+}
+  
+message RemoveUserFromAccountRequest {
+    string user_id = 1;
+    string account_name = 2;
+}
+  
+message RemoveUserFromAccountResponse {
+}
+  
+message BlockUserInAccountRequest {
+    string user_id = 1;
+    string account_name = 2;
+}
+  
+message BlockUserInAccountResponse {
+}
+  
+message UnblockUserInAccountRequest {
+    string user_id = 1;
+    string account_name = 2;
+}
+  
+message UnblockUserInAccountResponse {
+}
+  
+message QueryUserInAccountBlockStatusRequest {
+    string user_id = 1;
+    string account_name = 2;
+}
+  
+message QueryUserInAccountBlockStatusResponse {
+    bool blocked = 1;
+}
+  
+service UserService {
+    /*
+     * description: add user to account
+     * errors: 
+     * - account not exist
+     *   NOT_FOUND, ACCOUNT_NOT_FOUND, {}
+     * - user already exists in account
+     *   ALREADY_EXISTS, USER_ACCOUNT_ALREADY_EXISTS, {}
+     */
+    rpc AddUserToAccount(AddUserToAccountRequest) returns (AddUserToAccountResponse);
+  
+    /*
+     * description: remove user from account
+     * errors: 
+     * - account not exist
+     *   NOT_FOUND, ACCOUNT_NOT_FOUND, {}
+     * - user not exist in account
+     *   NOT_FOUND, USER_ACCOUNT_NOT_FOUND, {}
+     */
+    rpc RemoveUserFromAccount(RemoveUserFromAccountRequest) returns (RemoveUserFromAccountResponse);
+  
+    /*
+     * description: block user in account
+     * errors: 
+     * - account not exist
+     *   NOT_FOUND, ACCOUNT_NOT_FOUND, {}
+     * - user not exist in account
+     *   NOT_FOUND, USER_ACCOUNT_NOT_FOUND, {} 
+     * special case:
+     * - already blocked, don't throw error
+     */
+    rpc BlockUserInAccount(BlockUserInAccountRequest) returns (BlockUserInAccountResponse);
+  
+    /*
+     * description: unblock user in account
+     * errors: 
+     * - account not exist
+     *   NOT_FOUND, ACCOUNT_NOT_FOUND, {}
+     * - user not exist in account
+     *   NOT_FOUND, USER_ACCOUNT_NOT_FOUND, {} 
+     * special case:
+     * - already unblocked, don't throw error
+     */
+    rpc UnblockUserInAccount(UnblockUserInAccountRequest) returns (UnblockUserInAccountResponse);
+  
+    /*
+     * description: query if a user is blocked in an account
+     * errors: 
+     * - account not exist
+     *   NOT_FOUND, ACCOUNT_NOT_FOUND, {}
+     * - user not exist in account
+     *   NOT_FOUND, USER_ACCOUNT_NOT_FOUND, {} 
+     */
+    rpc QueryUserInAccountBlockStatus(QueryUserInAccountBlockStatusRequest) returns (QueryUserInAccountBlockStatusResponse);
+}

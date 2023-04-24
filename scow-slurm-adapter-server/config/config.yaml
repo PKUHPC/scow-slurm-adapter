@@ -1,0 +1,11 @@
+# slurm 数据库配置
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  dbname: slurm_acct_db
+  password: 81SLURM@@rabGTjN7
+  clustername: cluster
+
+partitions:
+  - compute

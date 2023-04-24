@@ -1,0 +1,36 @@
+syntax = "proto3"; // 版本声明，使用Protocol Buffers v3版本
+
+option go_package = "scow-slurm-adapter-server/pb;pb"; // 指定编译生成的文件目录，也可以指定golang包名
+
+package pb; // 默认包名
+
+message GetClusterConfigRequest {
+
+}
+
+message Partition {
+  string name = 1;
+  // mem: memory size in M
+  uint64 mem_mb = 2;
+  // cores: number of cores
+  uint32 cores = 3;
+  // gpus: number of gpu
+  uint32 gpus = 4;
+  // nodes: number of nodes
+  uint32 nodes = 5;
+  // list that stores qos. the list can be empty.
+  repeated string qos = 6;
+  // price item description
+  optional string comment = 7;
+}
+
+message GetClusterConfigResponse {
+  repeated Partition partitions = 1;
+}
+
+service ConfigService {
+  /*
+   * description: get cluster config
+   */
+  rpc GetClusterConfig(GetClusterConfigRequest) returns (GetClusterConfigResponse);
+}
