@@ -135,9 +135,9 @@ func FromCmdGetElapsedSeconds(cmd string) int64 {
 	return elapsedSeconds
 }
 
-func Ping(hostname string) bool {
-	Command := fmt.Sprintf("ping -c 1 %s  > /dev/null && echo true || echo false", hostname)
-	output, err := exec.Command("/bin/sh", "-c", Command).Output()
+func Ping(hostName string) bool {
+	pingCmd := fmt.Sprintf("ping -c 1 %s  > /dev/null && echo true || echo false", hostName)
+	output, err := exec.Command("/bin/sh", "-c", pingCmd).Output()
 	if err != nil {
 		return false
 	}
@@ -167,6 +167,48 @@ func GetGpuAllocsFromGpuId(matchCmd string, gpuId int, tresAlloc string) int32 {
 		}
 	}
 	return 0
+}
+
+func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, error) {
+	var errbuf bytes.Buffer
+	homePath, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	key, err := ioutil.ReadFile(path.Join(homePath, ".ssh", "id_rsa"))
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	client, err := ssh.Dial("tcp", hostName, &ssh.ClientConfig{
+		User:            user,
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	// 建立新会话
+	session, err := client.NewSession()
+	defer session.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the output to a bytes.Buffer
+	session.Stderr = &errbuf
+	// 会话输入关联到系统标准输入设备
+	result, err := session.Output(cmd)
+	// stderr as a string by calling the Buffer.String() method
+	stderr := errbuf.String()
+	if err != nil {
+		return strings.Split(stderr, " "), err
+	}
+	outputList := strings.Split(strings.TrimSpace(string(result)), " ")
+	return outputList, nil
 }
 
 func SshSubmitJobCommand(hostName string, user string, script string, workingDirectory string) ([]string, error) {

@@ -12,7 +12,7 @@ import (
 	// "google.golang.org/grpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	// "google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // hello_client
@@ -67,23 +67,23 @@ func main() {
 	// r, err := c.GetClusterConfig(ctx, &pb.GetClusterConfigRequest{})
 	// r, err := c.QueryJobTimeLimit(ctx, &pb.QueryJobTimeLimitRequest{JobId: "43"})
 	// r, err := c.ChangeJobTimeLimit(ctx, &pb.ChangeJobTimeLimitRequest{JobId: "47", DeltaMinutes: -10})
-	// r, err := c.CancelJob(ctx, &pb.CancelJobRequest{UserId: "test02", JobId: 47})
+	// r, err := c.CancelJob(ctx, &pb.CancelJobRequest{UserId: "test02", JobId: 1209})
 	// r, err := c.GetJobById(ctx, &pb.GetJobByIdRequest{JobId: 1193})
 
-	// user := "test02"
-	// account := "a_admin"
-	// state := "COMPLETED"
-	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"dddd", "dddffff"}, Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682152742}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
+	user := "test03"
+	account := "c_admin"
+	state := "CANCELLED"
+	r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"account", "job_id"}, Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
 
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{})
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1681970685}, EndTime: &timestamppb.Timestamp{Seconds: 1682316286}}}})
-	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
+	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account}, PageInfo: &pb.PageInfo{Page: 3, PageSize: 10}})
 
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682152742}}}})
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"ddddddd"}, PageInfo: &pb.PageInfo{Page: 2, PageSize: 20}})
-	qos := "normal"
-	timeLimitMinutes := uint32(1)
-	r, err := c.SubmitJob(ctx, &pb.SubmitJobRequest{Qos: &qos, TimeLimitMinutes: &timeLimitMinutes, UserId: "test02", JobName: "yyddyy", Account: "c_admin", NodeCount: 1, GpuCount: 0, MemoryMb: 200, CoreCount: 1, Script: "sleep 66", WorkingDirectory: "kdssssdkk", Partition: "compute"})
+	// qos := "normal"
+	// timeLimitMinutes := uint32(1)
+	// r, err := c.SubmitJob(ctx, &pb.SubmitJobRequest{Qos: &qos, TimeLimitMinutes: &timeLimitMinutes, UserId: "test02", JobName: "yyddyy", Account: "c_admin", NodeCount: 1, GpuCount: 0, MemoryMb: 200, CoreCount: 1, Script: "sleep 66", WorkingDirectory: "kdssssdkk", Partition: "compute"})
 
 	if err != nil {
 		log.Fatalf("could not greet: %v", err)

@@ -479,8 +479,9 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 	for _, p := range partitions {
 		updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(updateAllowAcct, ","))
 		utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
-		// 需要更新slurm.conf 配置文件
 	}
+	// 需要更新slurm.conf 配置文件
+	// updateSlurmConfigFile := fmt.Sprintf("sed -i 's/\\(AllowAccounts=\\).*/\\1%s/'   /etc/slurm/slurm.conf", strings.Join(updateAllowAcct, ","))
 	return &pb.BlockAccountResponse{}, nil
 }
 
@@ -725,19 +726,21 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 // job service
 func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	var (
-		userName string
-		idJob    int
+		userName  string
+		idJob     int
+		loginName string
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
+	loginNodes := allConfigs["loginnode"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
 	if err != nil {
 		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
 	}
 
-	// 判断用户存在否
+	// 判断用户是否存在
 	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
 	err = db.QueryRow(userSqlConfig).Scan(&userName)
 	if err != nil {
@@ -748,14 +751,28 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 	err = db.QueryRow(jobSqlConfig).Scan(&idJob)
 	if err != nil {
 		// 不存在或者作业已经完成
-		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
+		return nil, status.New(codes.NotFound, "The job not found.").Err()
 	}
 
-	// 取消作业可以远程在登录服务器上执行, 这个地方可以优化
-
-	// 取消作业的命令
-	cancelJobCmd := fmt.Sprintf("scancel -u %s %d", in.UserId, in.JobId)
-	utils.RunCommand(cancelJobCmd)
+	var loginNodeStatusResponse bool = false
+	// 检测登录节点的存活状态
+	for _, v := range loginNodes.([]interface{}) {
+		loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(loginNodeString)
+		if loginNodeStatusResponse {
+			loginName = loginNodeString
+			break
+		}
+	}
+	if loginNodeStatusResponse == false {
+		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+	}
+	host := fmt.Sprintf("%s:%d", loginName, 22)
+	scancelJobCmd := fmt.Sprintf("scancel %d", in.JobId)
+	scancelJobRes, err := utils.SshExectueShellCmd(host, in.UserId, scancelJobCmd)
+	if err != nil {
+		return nil, status.New(codes.NotFound, strings.Join(scancelJobRes, " ")).Err()
+	}
 	return &pb.CancelJobResponse{}, nil
 }
 
@@ -1013,7 +1030,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					startTimeFilter = in.Filter.EndTime.StartTime.GetSeconds()
 					endTimeFilter = in.Filter.EndTime.EndTime.GetSeconds()
 				}
-				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)  limit %d offset %d", clusterName, accountFilter, accountFilter, uid, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
+				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountFilter, accountFilter, uid, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
 				jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, uid, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			} else if in.Filter.User == nil && in.Filter.State != nil {
 				state := *in.Filter.State
@@ -1025,7 +1042,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					startTimeFilter = in.Filter.EndTime.StartTime.GetSeconds()
 					endTimeFilter = in.Filter.EndTime.EndTime.GetSeconds()
 				}
-				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) limit %d offset %d", clusterName, accountFilter, accountFilter, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
+				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)  order by id_job limit %d offset %d", clusterName, accountFilter, accountFilter, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
 				jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (account = '%s' or '%s' = '') and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			} else if in.Filter.User != nil && in.Filter.State == nil {
 				user := *in.Filter.User
@@ -1039,7 +1056,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					startTimeFilter = in.Filter.EndTime.StartTime.GetSeconds()
 					endTimeFilter = in.Filter.EndTime.EndTime.GetSeconds()
 				}
-				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) limit %d offset %d", clusterName, accountFilter, accountFilter, uid, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
+				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountFilter, accountFilter, uid, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
 				jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (account = '%s' or '%s' = '') and id_user = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, uid, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			} else if in.Filter.User == nil && in.Filter.State == nil {
 				if in.Filter.Account != nil {
@@ -1049,7 +1066,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					startTimeFilter = in.Filter.EndTime.StartTime.GetSeconds()
 					endTimeFilter = in.Filter.EndTime.EndTime.GetSeconds()
 				}
-				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) limit %d offset %d", clusterName, accountFilter, accountFilter, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
+				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountFilter, accountFilter, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, pageLimit, pageSize)
 				jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (account = '%s' or '%s' = '') and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			}
 		} else {
@@ -1111,7 +1128,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table ", clusterName)
 		}
 	}
-
 	rows, err := db.Query(jobSqlConfig)
 	if err != nil {
 		return nil, status.New(codes.Internal, "The job query failed.").Err()
@@ -1233,22 +1249,22 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	var scriptString = "#!/bin/bash\n"
 	var name string
 	var loginName string
-	var resBool bool = false
+	var loginNodeStatusResponse bool = false
 
 	allConfigs := config.ParseConfig()
 	loginNodes := allConfigs["loginnode"]
 
 	// 检测登录节点的存活状态
 	for _, v := range loginNodes.([]interface{}) {
-		newValue := fmt.Sprintf("%v", v)
-		resBool = utils.Ping(newValue)
-		if resBool {
-			loginName = newValue
+		loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(loginNodeString)
+		if loginNodeStatusResponse {
+			loginName = loginNodeString
 			break
 		}
 	}
 
-	if resBool == false {
+	if loginNodeStatusResponse == false {
 		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
 	}
 
