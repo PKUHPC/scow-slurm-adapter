@@ -7,5 +7,5 @@ mysql:
   password: 81SLURM@@rabGTjN7
   clustername: cluster
 
-partitions:
-  - compute
+loginNode:
+  - login01
