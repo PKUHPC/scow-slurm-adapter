@@ -565,7 +565,6 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(updateAllowAcct, ","))
 		utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
 	}
-	// 需要更新slurm.conf 配置文件
 	// updateSlurmConfigFile := fmt.Sprintf("sed -i 's/\\(AllowAccounts=\\).*/\\1%s/'   /etc/slurm/slurm.conf", strings.Join(updateAllowAcct, ","))
 	return &pb.BlockAccountResponse{}, nil
 }
@@ -607,7 +606,6 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 	return &pb.UnblockAccountResponse{}, nil
 }
 
-// 明天逻辑实现
 func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetAllAccountsWithUsersRequest) (*pb.GetAllAccountsWithUsersResponse, error) {
 	var (
 		acctName      string

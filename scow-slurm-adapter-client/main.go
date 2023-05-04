@@ -59,7 +59,7 @@ func main() {
 	// r, err := c.ListAccounts(ctx, &pb.ListAccountsRequest{UserId: "test05"})
 	// r, err := c.BlockAccount(ctx, &pb.BlockAccountRequest{AccountName: "c_admin"})
 	// r, err := c.UnblockAccount(ctx, &pb.UnblockAccountRequest{AccountName: "b_admin"})
-	r, err := c.CreateAccount(ctx, &pb.CreateAccountRequest{AccountName: "z1dddd2d5", OwnerUserId: "test02"})
+	r, err := c.CreateAccount(ctx, &pb.CreateAccountRequest{AccountName: "z1dddd", OwnerUserId: "test02"})
 	// r, err := c.QueryAccountBlockStatus(ctx, &pb.QueryAccountBlockStatusRequest{AccountName: "c_admin"})
 	// r, err := c.GetAllAccountsWithUsers(ctx, &pb.GetAllAccountsWithUsersRequest{})
 	// r, err := c.GetClusterConfig(ctx, &pb.GetClusterConfigRequest{})
