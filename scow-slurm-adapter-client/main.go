@@ -12,7 +12,6 @@ import (
 	// "google.golang.org/grpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // hello_client
@@ -35,17 +34,16 @@ func main() {
 	}
 	defer conn.Close()
 	// c := pb.NewUserServiceClient(conn)
-	// c := pb.NewAccountServiceClient(conn)
+	c := pb.NewAccountServiceClient(conn)
 	// c := pb.NewConfigServiceClient(conn)
-	c := pb.NewJobServiceClient(conn)
+	// c := pb.NewJobServiceClient(conn)
 
 	// 执行RPC调用并打印收到的响应数据
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
-	// r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
 	// r, err := c.QueryJobLimitTime(ctx, &pb.QueryJobLimitTimeRequest{JobId: 3})
 	// r, err := c.ChangeJobLimitTime(ctx, &pb.ChangeJobLimitTimeRequest{JobId: 8, Minute: -30})
-	// r, err := c.AddUserToAccount(ctx, &pb.AddUserToAccountRequest{})
+	// r, err := c.AddUserToAccount(ctx, &pb.AddUserToAccountRequest{UserId: "test05", AccountName: "e_admin"})
 	// r, err := c.GetAllAccountsWithUsers(ctx, &pb.GetAllAccountsWithUsersRequest{})
 	// account_name 映射到gRPC上是 AccountName
 	// r, err := c.UnblockAccount(ctx, &pb.UnblockAccountRequest{AccountName: []string{"yangjie", "yangjie", "yangjie"}}) // repeated的用法，就是一个切片,可以用0个或者多个
@@ -53,15 +51,15 @@ func main() {
 	// r, err := c.ListAccounts(ctx, &pb.ListAccountsRequest{UserId: "root"})
 
 	// resp, err := c.ListAccounts(ctx, &pb.ListAccountsRequest{UserId: "root"})
-	// r, err := c.BlockUserInAccount(ctx, &pb.BlockUserInAccountRequest{UserId: "test02", AccountName: "a_admin"})
-	// r, err := c.UnblockUserInAccount(ctx, &pb.UnblockUserInAccountRequest{UserId: "test02", AccountName: "a_admin"})
+	// r, err := c.BlockUserInAccount(ctx, &pb.BlockUserInAccountRequest{UserId: "test02", AccountName: "p_admin"})
+	// r, err := c.UnblockUserInAccount(ctx, &pb.UnblockUserInAccountRequest{UserId: "test02", AccountName: "p_admin"})
 	// r, err := c.AddUserToAccount(ctx, &pb.AddUserToAccountRequest{UserId: "test02", AccountName: "a_admin"})
-	// r, err := c.QueryUserInAccountBlockStatus(ctx, &pb.QueryUserInAccountBlockStatusRequest{UserId: "test02", AccountName: "a_admin"})
-	// r, err := c.RemoveUserFromAccount(ctx, &pb.RemoveUserFromAccountRequest{UserId: "test03", AccountName: "a_admin"})
-	// r, err := c.ListAccounts(ctx, &pb.ListAccountsRequest{UserId: "test03"})
+	// r, err := c.QueryUserInAccountBlockStatus(ctx, &pb.QueryUserInAccountBlockStatusRequest{UserId: "test02", AccountName: "p_admin"})
+	// r, err := c.RemoveUserFromAccount(ctx, &pb.RemoveUserFromAccountRequest{UserId: "test05", AccountName: "a_admin"})
+	// r, err := c.ListAccounts(ctx, &pb.ListAccountsRequest{UserId: "test05"})
 	// r, err := c.BlockAccount(ctx, &pb.BlockAccountRequest{AccountName: "c_admin"})
 	// r, err := c.UnblockAccount(ctx, &pb.UnblockAccountRequest{AccountName: "b_admin"})
-	// r, err := c.CreateAccount(ctx, &pb.CreateAccountRequest{AccountName: "c_admin", OwnerUserId: "test02"})
+	r, err := c.CreateAccount(ctx, &pb.CreateAccountRequest{AccountName: "z1dddd2d5", OwnerUserId: "test02"})
 	// r, err := c.QueryAccountBlockStatus(ctx, &pb.QueryAccountBlockStatusRequest{AccountName: "c_admin"})
 	// r, err := c.GetAllAccountsWithUsers(ctx, &pb.GetAllAccountsWithUsersRequest{})
 	// r, err := c.GetClusterConfig(ctx, &pb.GetClusterConfigRequest{})
@@ -70,10 +68,10 @@ func main() {
 	// r, err := c.CancelJob(ctx, &pb.CancelJobRequest{UserId: "test02", JobId: 1209})
 	// r, err := c.GetJobById(ctx, &pb.GetJobByIdRequest{JobId: 1193})
 
-	user := "test03"
-	account := "c_admin"
-	state := "CANCELLED"
-	r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"account", "job_id"}, Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
+	// user := "test03"
+	// account := "c_admin"
+	// state := "CANCELLED"
+	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"account", "job_id"}, Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
 
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{})
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1681970685}, EndTime: &timestamppb.Timestamp{Seconds: 1682316286}}}})

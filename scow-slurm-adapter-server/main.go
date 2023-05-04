@@ -41,14 +41,17 @@ type serverJob struct {
 // UserService
 func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccountRequest) (*pb.AddUserToAccountResponse, error) {
 	var (
-		acctName string
-		userName string
-		qosName  string
-		user     string
-		qosList  []string
+		acctName                string
+		userName                string
+		qosName                 string
+		user                    string
+		qosList                 []string
+		loginName               string
+		loginNodeStatusResponse bool
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
+	loginNodes := allConfigs["loginnode"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
@@ -60,6 +63,27 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exists.").Err()
 	}
+
+	// 检测登录节点的存活状态
+	for _, v := range loginNodes.([]interface{}) {
+		loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(loginNodeString)
+		if loginNodeStatusResponse {
+			loginName = loginNodeString
+			break
+		}
+	}
+	if loginNodeStatusResponse == false {
+		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+	}
+	// 验证user是否存在的用户
+	getUserUidCmd := fmt.Sprintf("id -u %s", in.UserId)
+	host := fmt.Sprintf("%s:%d", loginName, 22)
+	_, err = utils.SshExectueShellCmd(host, "root", getUserUidCmd)
+	if err != nil {
+		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+	}
+
 	// 查询系统中的base Qos
 	qosSqlConfig := fmt.Sprintf("select name from qos_table")
 	rows, err := db.Query(qosSqlConfig)
@@ -103,22 +127,26 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		}
 		return &pb.AddUserToAccountResponse{}, nil
 	}
-	return &pb.AddUserToAccountResponse{}, nil
+	// 关联已经存在的情况
+	return nil, status.New(codes.AlreadyExists, "The user already exists in account.").Err()
 }
 
 // 这里要加逻辑
 func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUserFromAccountRequest) (*pb.RemoveUserFromAccountResponse, error) {
 	var (
-		acctName string
-		userName string
-		user     string
-		acct     string
-		jobName  string
-		jobList  []string
-		acctList []string
+		acctName                string
+		userName                string
+		user                    string
+		acct                    string
+		jobName                 string
+		loginName               string
+		loginNodeStatusResponse bool
+		jobList                 []string
+		acctList                []string
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
+	loginNodes := allConfigs["loginnode"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
@@ -130,6 +158,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
+	// ldap中不存在，slurm中的user中肯定不存在
 	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
 	err = db.QueryRow(userSqlConfig).Scan(&userName)
 	if err != nil {
@@ -160,12 +189,28 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 	if err != nil {
 		return nil, status.New(codes.Internal, "The assoc account query failed.").Err()
 	}
-	getUidCmd := fmt.Sprintf("id -u %s", in.UserId)
-	output, err := utils.RunCommand(getUidCmd)
-	if err != nil {
-		return nil, status.New(codes.Internal, "Shell command execute falied!").Err()
+
+	// 检测登录节点的存活状态
+	for _, v := range loginNodes.([]interface{}) {
+		loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(loginNodeString)
+		if loginNodeStatusResponse {
+			loginName = loginNodeString
+			break
+		}
 	}
-	jobSqlConfig := fmt.Sprintf("select job_name from %s_job_table where id_user = %s and account  = '%s' and state in (0, 1, 2)", clusterName, output, in.AccountName)
+	if loginNodeStatusResponse == false {
+		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+	}
+
+	getUidCmd := fmt.Sprintf("id -u %s", in.UserId)
+	host := fmt.Sprintf("%s:%d", loginName, 22)
+	outputList, err := utils.SshExectueShellCmd(host, "root", getUidCmd)
+	if err != nil {
+		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+	}
+
+	jobSqlConfig := fmt.Sprintf("select job_name from %s_job_table where id_user = %s and account  = '%s' and state in (0, 1, 2)", clusterName, outputList[0], in.AccountName)
 	jobRows, err := db.Query(jobSqlConfig)
 	if err != nil {
 		return nil, status.New(codes.Internal, "The job query failed.").Err()
@@ -227,6 +272,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
+	// ldap中不存在的话在slurm的user表中肯定也不存在
 	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
 	err = db.QueryRow(userSqlConfig).Scan(&userName)
 	if err != nil {
@@ -374,15 +420,51 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 
 func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
 	var (
-		acctName string
-		qosName  string
-		qosList  []string
+		acctName                string
+		userName                string
+		qosName                 string
+		loginName               string
+		loginNodeStatusResponse bool
+		userExistsFlag          bool
+		qosList                 []string
 	)
+	allConfigs := config.ParseConfig()
+	loginNodes := allConfigs["loginnode"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
 	if err != nil {
 		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
 	}
+
+	// 检测登录节点的存活状态
+	for _, v := range loginNodes.([]interface{}) {
+		loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(loginNodeString)
+		if loginNodeStatusResponse {
+			loginName = loginNodeString
+			break
+		}
+	}
+	if loginNodeStatusResponse == false {
+		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+	}
+
+	// 判断user中ldap中存不存在
+	getUidCmd := fmt.Sprintf("id -u %s", in.OwnerUserId)
+	host := fmt.Sprintf("%s:%d", loginName, 22)
+	_, err = utils.SshExectueShellCmd(host, "root", getUidCmd)
+	if err != nil {
+		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+	}
+	// 判断用户是不是在user table中
+	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.OwnerUserId)
+	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	if err != nil {
+		userExistsFlag = false
+	} else {
+		userExistsFlag = true
+	}
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
 	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
@@ -407,14 +489,17 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			return nil, status.New(codes.Internal, "The qos query failed.").Err()
 		}
 		baseQos := strings.Join(qosList, ",")
-
 		createAccountCmd := fmt.Sprintf("sacctmgr -i create account name=%s", in.AccountName)
 		utils.ExecuteShellCommand(createAccountCmd)
 		for _, p := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, p, in.AccountName)
+			// default Qos is normal, if user in user table, does not set qos and defaultQOS
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, "normal")
 			utils.ExecuteShellCommand(createUserCmd)
-			utils.ExecuteShellCommand(modifyUserCmd)
+			if userExistsFlag == false {
+				utils.ExecuteShellCommand(modifyUserCmd)
+			}
+			// go utils.ExecuteShellCommand(modifyUserCmd)
 		}
 		return &pb.CreateAccountResponse{}, nil
 	}
