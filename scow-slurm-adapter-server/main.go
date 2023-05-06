@@ -41,17 +41,14 @@ type serverJob struct {
 // UserService
 func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccountRequest) (*pb.AddUserToAccountResponse, error) {
 	var (
-		acctName                string
-		userName                string
-		qosName                 string
-		user                    string
-		qosList                 []string
-		loginName               string
-		loginNodeStatusResponse bool
+		acctName string
+		userName string
+		qosName  string
+		user     string
+		qosList  []string
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
-	loginNodes := allConfigs["loginnode"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
@@ -64,22 +61,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		return nil, status.New(codes.NotFound, "Account does not exists.").Err()
 	}
 
-	// 检测登录节点的存活状态
-	for _, v := range loginNodes.([]interface{}) {
-		loginNodeString := fmt.Sprintf("%v", v)
-		loginNodeStatusResponse = utils.Ping(loginNodeString)
-		if loginNodeStatusResponse {
-			loginName = loginNodeString
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
-		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
-	}
-	// 验证user是否存在的用户
-	getUserUidCmd := fmt.Sprintf("id -u %s", in.UserId)
-	host := fmt.Sprintf("%s:%d", loginName, 22)
-	_, err = utils.SshExectueShellCmd(host, "root", getUserUidCmd)
+	_, err = utils.SearchUidNumberFromLdap(in.UserId)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
 	}
@@ -88,19 +70,19 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	qosSqlConfig := fmt.Sprintf("select name from qos_table")
 	rows, err := db.Query(qosSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The qos query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&qosName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The qos query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		qosList = append(qosList, qosName)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The qos query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	baseQos := strings.Join(qosList, ",") // 系统中获取的baseQos的值
 	// 查询用户是否在系统中
@@ -134,19 +116,16 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 // 这里要加逻辑
 func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUserFromAccountRequest) (*pb.RemoveUserFromAccountResponse, error) {
 	var (
-		acctName                string
-		userName                string
-		user                    string
-		acct                    string
-		jobName                 string
-		loginName               string
-		loginNodeStatusResponse bool
-		jobList                 []string
-		acctList                []string
+		acctName string
+		userName string
+		user     string
+		acct     string
+		jobName  string
+		jobList  []string
+		acctList []string
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
-	loginNodes := allConfigs["loginnode"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
@@ -175,42 +154,27 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 	assocAcctSqlConfig := fmt.Sprintf("select distinct acct from %s_assoc_table where user = '%s' and deleted = 0 and acct != '%s'", clusterName, in.UserId, in.AccountName)
 	rows, err := db.Query(assocAcctSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The assoc account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&acct)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The assoc account query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		acctList = append(acctList, acct)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The assoc account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 
-	// 检测登录节点的存活状态
-	for _, v := range loginNodes.([]interface{}) {
-		loginNodeString := fmt.Sprintf("%v", v)
-		loginNodeStatusResponse = utils.Ping(loginNodeString)
-		if loginNodeStatusResponse {
-			loginName = loginNodeString
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
-		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
-	}
-
-	getUidCmd := fmt.Sprintf("id -u %s", in.UserId)
-	host := fmt.Sprintf("%s:%d", loginName, 22)
-	outputList, err := utils.SshExectueShellCmd(host, "root", getUidCmd)
+	uid, err := utils.SearchUidNumberFromLdap(in.UserId)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
 	}
 
-	jobSqlConfig := fmt.Sprintf("select job_name from %s_job_table where id_user = %s and account  = '%s' and state in (0, 1, 2)", clusterName, outputList[0], in.AccountName)
+	jobSqlConfig := fmt.Sprintf("select job_name from %s_job_table where id_user = %d and account  = '%s' and state in (0, 1, 2)", clusterName, uid, in.AccountName)
 	jobRows, err := db.Query(jobSqlConfig)
 	if err != nil {
 		return nil, status.New(codes.Internal, "The job query failed.").Err()
@@ -401,68 +365,38 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 	assocSqlConfig := fmt.Sprintf("select acct from %s_assoc_table where user = '%s' and deleted = 0", clusterName, in.UserId)
 	rows, err := db.Query(assocSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&assocAcct)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The account query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		acctList = append(acctList, assocAcct)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	return &pb.ListAccountsResponse{Accounts: acctList}, nil
 }
 
 func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
 	var (
-		acctName                string
-		userName                string
-		qosName                 string
-		loginName               string
-		loginNodeStatusResponse bool
-		userExistsFlag          bool
-		qosList                 []string
+		acctName string
+		qosName  string
+		qosList  []string
 	)
-	allConfigs := config.ParseConfig()
-	loginNodes := allConfigs["loginnode"]
 	dbConfig := utils.DatabaseConfig()
 	db, err := sql.Open("mysql", dbConfig)
 	if err != nil {
 		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
 	}
 
-	// 检测登录节点的存活状态
-	for _, v := range loginNodes.([]interface{}) {
-		loginNodeString := fmt.Sprintf("%v", v)
-		loginNodeStatusResponse = utils.Ping(loginNodeString)
-		if loginNodeStatusResponse {
-			loginName = loginNodeString
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
-		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
-	}
-
-	// 判断user中ldap中存不存在
-	getUidCmd := fmt.Sprintf("id -u %s", in.OwnerUserId)
-	host := fmt.Sprintf("%s:%d", loginName, 22)
-	_, err = utils.SshExectueShellCmd(host, "root", getUidCmd)
+	_, err = utils.SearchUidNumberFromLdap(in.OwnerUserId)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
-	}
-	// 判断用户是不是在user table中
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.OwnerUserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
-	if err != nil {
-		userExistsFlag = false
-	} else {
-		userExistsFlag = true
 	}
 
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
@@ -473,33 +407,29 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		qosSqlConfig := fmt.Sprintf("select name from qos_table")
 		rows, err := db.Query(qosSqlConfig)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The qos query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		defer rows.Close()
 		for rows.Next() {
 			err := rows.Scan(&qosName)
 			if err != nil {
-				return nil, status.New(codes.Internal, "The qos query failed.").Err()
+				return nil, status.New(codes.Internal, "Database query failed.").Err()
 			}
 			qosList = append(qosList, qosName)
 		}
 
 		err = rows.Err()
 		if err != nil {
-			return nil, status.New(codes.Internal, "The qos query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		baseQos := strings.Join(qosList, ",")
 		createAccountCmd := fmt.Sprintf("sacctmgr -i create account name=%s", in.AccountName)
 		utils.ExecuteShellCommand(createAccountCmd)
 		for _, p := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, p, in.AccountName)
-			// default Qos is normal, if user in user table, does not set qos and defaultQOS
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, "normal")
 			utils.ExecuteShellCommand(createUserCmd)
-			if userExistsFlag == false {
-				utils.ExecuteShellCommand(modifyUserCmd)
-			}
-			// go utils.ExecuteShellCommand(modifyUserCmd)
+			utils.ExecuteShellCommand(modifyUserCmd)
 		}
 		return &pb.CreateAccountResponse{}, nil
 	}
@@ -532,19 +462,19 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		acctSqlConfig := fmt.Sprintf("select DISTINCT acct from %s_assoc_table where deleted=0 and acct != '%s'", clusterName, in.AccountName)
 		rows, err := db.Query(acctSqlConfig)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The account query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		defer rows.Close()
 		for rows.Next() {
 			err := rows.Scan(&assocAcctName)
 			if err != nil {
-				return nil, status.New(codes.Internal, "The account query failed.").Err()
+				return nil, status.New(codes.Internal, "Database query failed.").Err()
 			}
 			acctList = append(acctList, assocAcctName)
 		}
 		err = rows.Err()
 		if err != nil {
-			return nil, status.New(codes.Internal, "The account query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		allowAcct := strings.Join(acctList, ",")
 		for _, v := range partitions {
@@ -569,9 +499,7 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 	return &pb.BlockAccountResponse{}, nil
 }
 
-// 解封账号
 func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccountRequest) (*pb.UnblockAccountResponse, error) {
-	// 先查用户是否存在
 	var (
 		acctName string
 	)
@@ -599,7 +527,6 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		for _, p := range partitions {
 			updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(AllowAcctList, ","))
 			utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
-			// 需要更新slurm.conf 配置文件
 		}
 		return &pb.UnblockAccountResponse{}, nil
 	}
@@ -626,19 +553,19 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where deleted = 0")
 	rows, err := db.Query(acctSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&acctName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The account query failed.").Err()
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
 		}
 		acctList = append(acctList, acctName)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The account query failed.").Err()
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
 	}
 
 	// 查询allowAcct的值(ALL和具体的acct列表)
@@ -772,6 +699,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			if gpusOutput == "Gres=(null)" {
 				totalGpus = 0
 			} else {
+				// 字符串转整型
 				i, _ := strconv.Atoi(gpusOutput)
 				totalGpus = uint32(i)
 			}
@@ -788,9 +716,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", v)
 		qosOutput, _ := utils.RunCommand(getPartitionQosCmd)
 		qosArray := strings.Split(qosOutput, "=")
-		if qosArray[len(qosArray)-1] == "N/A" {
-			qos = qosArray
-		} else {
+		if qosArray[len(qosArray)-1] != "N/A" {
 			qos = append(qos, qosArray[len(qosArray)-1])
 		}
 		parts = append(parts, &pb.Partition{
@@ -808,10 +734,12 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 
 // job service
 func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
+	// 取消作业在登录节点上执行
 	var (
-		userName  string
-		idJob     int
-		loginName string
+		userName                string
+		idJob                   int
+		loginName               string
+		loginNodeStatusResponse bool = false
 	)
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
@@ -837,7 +765,6 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		return nil, status.New(codes.NotFound, "The job not found.").Err()
 	}
 
-	var loginNodeStatusResponse bool = false
 	// 检测登录节点的存活状态
 	for _, v := range loginNodes.([]interface{}) {
 		loginNodeString := fmt.Sprintf("%v", v)
@@ -936,7 +863,9 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		stateString      string
 		gpuId            int
 		tresAlloc        string
+		gpuIdList        []int
 	)
+
 	allConfigs := config.ParseConfig()
 	mysql := allConfigs["mysql"]
 	clusterName := mysql.(map[string]interface{})["clustername"]
@@ -956,8 +885,28 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	endTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
 	qosSqlconfig := fmt.Sprintf("select name from qos_table where id = %d", idQos)
 	db.QueryRow(qosSqlconfig).Scan(&qosName)
-	gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gpu'")
-	db.QueryRow(gpuSqlConfig).Scan(&gpuId)
+
+	// 查找SelectType插件的值
+	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
+	output, _ := utils.RunCommand(slurmConfigCmd)
+
+	gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gredds' and deleted = 0")
+	rows, err := db.Query(gpuSqlConfig)
+	if err != nil {
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&gpuId)
+		if err != nil {
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
+		}
+		gpuIdList = append(gpuIdList, gpuId)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
+	}
 
 	if state == 0 || state == 2 {
 		getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
@@ -978,11 +927,15 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			nodeReq = nodesAlloc
 			getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
 			elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
-			if gpuId == 0 {
-				gpusAlloc = 0
+			if output == "cons_tres" || output == "cons_res" {
+				if len(gpuIdList) == 0 {
+					gpusAlloc = 0
+				} else {
+					// 从tres_alloc中解析出gpu对应的卡数
+					gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+				}
 			} else {
-				matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-				gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+				gpusAlloc = 0
 			}
 		}
 	} else if state == 1 {
@@ -992,11 +945,15 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		nodeReq = nodesAlloc
 		getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
 		elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
-		if gpuId == 0 {
-			gpusAlloc = 0
+		if output == "cons_tres" || output == "cons_res" {
+			if len(gpuIdList) == 0 {
+				gpusAlloc = 0
+			} else {
+				// 从tres_alloc中解析出gpu对应的卡数
+				gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+			}
 		} else {
-			matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-			gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+			gpusAlloc = 0
 		}
 	} else {
 		reason = "end of job"
@@ -1004,11 +961,15 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		memAllocMb = memReq
 		nodeReq = nodesAlloc
 		elapsedSeconds = endTime - startTime
-		if gpuId == 0 {
-			gpusAlloc = 0
+		if output == "cons_tres" || output == "cons_res" {
+			if len(gpuIdList) == 0 {
+				gpusAlloc = 0
+			} else {
+				// 从tres_alloc中解析出gpu对应的卡数
+				gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+			}
 		} else {
-			matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-			gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+			gpusAlloc = 0
 		}
 	}
 	jobInfo := &pb.JobInfo{
@@ -1078,6 +1039,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		count             int
 		pageLimit         int
 		totalCount        uint32
+		gpuIdList         []int
 		jobInfo           []*pb.JobInfo
 	)
 	allConfigs := config.ParseConfig()
@@ -1088,7 +1050,28 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	if err != nil {
 		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
 	}
-	// 这里的fields会传些啥,传啥就返回啥
+	// 查找SelectType插件的值
+	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
+	output, _ := utils.RunCommand(slurmConfigCmd)
+
+	gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gres' and deleted = 0")
+	rowList, err := db.Query(gpuSqlConfig)
+	if err != nil {
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
+	}
+	defer rowList.Close()
+	for rowList.Next() {
+		err := rowList.Scan(&gpuId)
+		if err != nil {
+			return nil, status.New(codes.Internal, "Database query failed.").Err()
+		}
+		gpuIdList = append(gpuIdList, gpuId)
+	}
+	err = rowList.Err()
+	if err != nil {
+		return nil, status.New(codes.Internal, "Database query failed.").Err()
+	}
+
 	if in.PageInfo != nil {
 		page := in.PageInfo.Page
 		pageSize := in.PageInfo.PageSize
@@ -1103,9 +1086,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				state := *in.Filter.State
 				stateId := utils.GetStateId(state)
 				user := *in.Filter.User
-				getUidFromUserCmd := fmt.Sprintf("id -u %s", user)
-				output, _ := utils.RunCommand(getUidFromUserCmd)
-				uid, _ := strconv.Atoi(output)
+				uid, _ := utils.SearchUidNumberFromLdap(user)
 				if in.Filter.Account != nil {
 					accountFilter = *in.Filter.Account
 				}
@@ -1129,9 +1110,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (account = '%s' or '%s' = '') and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			} else if in.Filter.User != nil && in.Filter.State == nil {
 				user := *in.Filter.User
-				getUidFromUserCmd := fmt.Sprintf("id -u %s", user)
-				output, _ := utils.RunCommand(getUidFromUserCmd)
-				uid, _ := strconv.Atoi(output)
+				uid, _ := utils.SearchUidNumberFromLdap(user)
 				if in.Filter.Account != nil {
 					accountFilter = *in.Filter.Account
 				}
@@ -1162,9 +1141,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				state := *in.Filter.State
 				stateId := utils.GetStateId(state)
 				user := *in.Filter.User
-				getUidFromUserCmd := fmt.Sprintf("id -u %s", user)
-				output, _ := utils.RunCommand(getUidFromUserCmd)
-				uid, _ := strconv.Atoi(output)
+				uid, _ := utils.SearchUidNumberFromLdap(user)
 				if in.Filter.Account != nil {
 					accountFilter = *in.Filter.Account
 				}
@@ -1186,9 +1163,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				jobSqlConfig = fmt.Sprintf("select account,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc from %s_job_table where (account = '%s' or '%s' = '') and state = %d and (time_end > %d or %d = 0) and (time_end < %d or %d = 0)", clusterName, accountFilter, accountFilter, stateId, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter)
 			} else if in.Filter.User != nil && in.Filter.State == nil {
 				user := *in.Filter.User
-				getUidFromUserCmd := fmt.Sprintf("id -u %s", user)
-				output, _ := utils.RunCommand(getUidFromUserCmd)
-				uid, _ := strconv.Atoi(output)
+				uid, _ := utils.SearchUidNumberFromLdap(user)
 				if in.Filter.Account != nil {
 					accountFilter = *in.Filter.Account
 				}
@@ -1230,8 +1205,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 		qosSqlconfig := fmt.Sprintf("select name from qos_table where id = %d", idQos)
 		db.QueryRow(qosSqlconfig).Scan(&qosName)
-		gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gpu'")
-		db.QueryRow(gpuSqlConfig).Scan(&gpuId)
 
 		if state == 0 || state == 2 {
 			getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
@@ -1252,11 +1225,14 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				nodeReq = nodesAlloc
 				getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
 				elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
-				if gpuId == 0 {
-					gpusAlloc = 0
+				if output == "cons_tres" || output == "cons_res" {
+					if len(gpuIdList) == 0 {
+						gpusAlloc = 0
+					} else {
+						gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+					}
 				} else {
-					matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-					gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+					gpusAlloc = 0
 				}
 			}
 		} else if state == 1 {
@@ -1266,11 +1242,14 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			nodeReq = nodesAlloc
 			getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
 			elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
-			if gpuId == 0 {
-				gpusAlloc = 0
+			if output == "cons_tres" || output == "cons_res" {
+				if len(gpuIdList) == 0 {
+					gpusAlloc = 0
+				} else {
+					gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+				}
 			} else {
-				matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-				gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+				gpusAlloc = 0
 			}
 		} else {
 			reason = "end of job"
@@ -1278,11 +1257,14 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			memAllocMb = memReq
 			nodeReq = nodesAlloc
 			elapsedSeconds = endTime - startTime
-			if gpuId == 0 {
-				gpusAlloc = 0
+			if output == "cons_tres" || output == "cons_res" {
+				if len(gpuIdList) == 0 {
+					gpusAlloc = 0
+				} else {
+					gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+				}
 			} else {
-				matchGpuIdCmd := fmt.Sprintf("echo %s | grep '%d'", tresAlloc, gpuId)
-				gpusAlloc = utils.GetGpuAllocsFromGpuId(matchGpuIdCmd, gpuId, tresAlloc)
+				gpusAlloc = 0
 			}
 		}
 
@@ -1315,6 +1297,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	if err != nil {
 		return nil, status.New(codes.Internal, "The job query failed.").Err()
 	}
+	// 获取总的页数逻辑
 	if jobSqlTotalConfig != "" {
 		db.QueryRow(jobSqlTotalConfig).Scan(&count)
 		if count%pageLimit == 0 {

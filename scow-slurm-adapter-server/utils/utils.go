@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	ldap "github.com/go-ldap/ldap/v3"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -169,6 +171,25 @@ func GetGpuAllocsFromGpuId(matchCmd string, gpuId int, tresAlloc string) int32 {
 	return 0
 }
 
+func GetGpuAllocsFromGpuIdList(tresAlloc string, gpuId []int) int32 {
+	var gpusAlloc int32
+	resAllocList := strings.Split(tresAlloc, ",")
+	for _, idValue := range gpuId {
+		for _, resAlloc := range resAllocList {
+			resAllocKey := strings.Split(resAlloc, "=")
+			id := resAllocKey[0]
+			idInt, _ := strconv.Atoi(id)
+			if idInt == idValue {
+				number := resAllocKey[1]
+				numberInt, _ := strconv.Atoi(number)
+				gpusAlloc = int32(numberInt)
+				return gpusAlloc
+			}
+		}
+	}
+	return gpusAlloc
+}
+
 func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, error) {
 	var errbuf bytes.Buffer
 	homePath, err := os.UserHomeDir()
@@ -253,4 +274,53 @@ func SshSubmitJobCommand(hostName string, user string, script string, workingDir
 	}
 	outputList := strings.Split(strings.TrimSpace(string(result)), " ")
 	return outputList, nil
+}
+
+func SearchUidNumberFromLdap(user string) (int, error) {
+	// 配置文件中读取ldap的配置项
+	allSettings := config.ParseConfig()
+	ldapConnect := allSettings["ldap"]
+	ip := ldapConnect.(map[string]interface{})["ip"]
+	port := ldapConnect.(map[string]interface{})["port"]
+	baseDN := ldapConnect.(map[string]interface{})["basedn"]
+	bindDN := ldapConnect.(map[string]interface{})["binddn"]
+	password := ldapConnect.(map[string]interface{})["password"]
+
+	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
+	l, err := ldap.Dial("tcp", ldapUrl)
+	if err != nil {
+		fmt.Printf("Failed to connect to LDAP server: %s", err.Error())
+		return 0, err
+	}
+	defer l.Close()
+
+	// 绑定到 LDAP 服务器，使用管理员账户进行查询
+	err = l.Bind(fmt.Sprintf("%v", bindDN), fmt.Sprintf("%v", password))
+	if err != nil {
+		fmt.Printf("Failed to bind to LDAP server: %s", err.Error())
+		return 0, err
+	}
+
+	// 查询用户的 UID
+	searchRequest := ldap.NewSearchRequest(
+		fmt.Sprintf("%v", baseDN),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=posixAccount)(uid=%s))", user),
+		[]string{"uidNumber"},
+		nil,
+	)
+	searchResult, err := l.Search(searchRequest)
+	if err != nil {
+		fmt.Printf("Failed to search LDAP server: %s", err.Error())
+		return 0, err
+	}
+
+	// 打印查询结果
+	if len(searchResult.Entries) == 0 {
+		return 0, errors.New("User not found.")
+	} else {
+		uid := searchResult.Entries[0].GetAttributeValue("uidNumber")
+		myIntUid, _ := strconv.Atoi(uid)
+		return myIntUid, nil
+	}
 }
