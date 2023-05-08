@@ -129,12 +129,25 @@ func GetStateId(stateString string) int {
 
 func FromCmdGetElapsedSeconds(cmd string) int64 {
 	ElapsedSecondsOutput, _ := RunCommand(cmd)
-	ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, ":")
-	hours, _ := strconv.Atoi(ElapsedSecondsList[0])
-	minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
-	seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
-	elapsedSeconds := int64(seconds) + int64(minutes)*60 + int64(hours)*3600
-	return elapsedSeconds
+	// 先判断作业时长中是否包含-
+	// 超过一天的作业
+	if strings.Contains(ElapsedSecondsOutput, "-") {
+		ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, "-")
+		day, _ := strconv.Atoi(ElapsedSecondsList[0])
+		ElapsedSecondsListNew := strings.Split(ElapsedSecondsList[1], ":")
+		hours, _ := strconv.Atoi(ElapsedSecondsListNew[0])
+		minutes, _ := strconv.Atoi(ElapsedSecondsListNew[1])
+		seconds, _ := strconv.Atoi(ElapsedSecondsListNew[2])
+		return int64(seconds) + int64(minutes)*60 + int64(hours)*3600 + int64(day)*24*3600
+	} else {
+		// 没有超过一天的作业
+		ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, ":")
+		hours, _ := strconv.Atoi(ElapsedSecondsList[0])
+		minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
+		seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
+		elapsedSeconds := int64(seconds) + int64(minutes)*60 + int64(hours)*3600
+		return elapsedSeconds
+	}
 }
 
 func Ping(hostName string) bool {

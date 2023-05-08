@@ -66,16 +66,16 @@ func main() {
 	// r, err := c.QueryJobTimeLimit(ctx, &pb.QueryJobTimeLimitRequest{JobId: "1261118"})
 	// r, err := c.ChangeJobTimeLimit(ctx, &pb.ChangeJobTimeLimitRequest{JobId: "1269", DeltaMinutes: 10})
 	// r, err := c.CancelJob(ctx, &pb.CancelJobRequest{UserId: "test0d5", JobId: 1268})
-	// r, err := c.GetJobById(ctx, &pb.GetJobByIdRequest{JobId: 1270})
+	r, err := c.GetJobById(ctx, &pb.GetJobByIdRequest{JobId: 1200})
 
-	user := "test03"
-	account := "c_admin"
+	// user := "test03"
+	// account := "c_admin"
 	// state := "CANCELLED"
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"account", "job_id"}, Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
 
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{})
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1681970685}, EndTime: &timestamppb.Timestamp{Seconds: 1682316286}}}})
-	r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
+	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10}})
 
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Filter: &pb.GetJobsRequest_Filter{User: &user, Account: &account, State: &state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682152742}}}})
 	// r, err := c.GetJobs(ctx, &pb.GetJobsRequest{Fields: []string{"ddddddd"}, PageInfo: &pb.PageInfo{Page: 2, PageSize: 20}})
