@@ -10,7 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	config "scow-slurm-adapter-server/config"
+	config "scow-slurm-adapter/config"
 	"strings"
 	"syscall"
 
