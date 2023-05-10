@@ -2,6 +2,8 @@
 
 ## Build
 
+Requires [Buf]([Buf](https://buf.build/docs/installation/)).
+
 ```bash
 # Generate code from latest scow-slurm-adapter
 make protos
