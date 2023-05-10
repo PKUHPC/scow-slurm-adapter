@@ -10,8 +10,9 @@ message JobInfo {
   uint32 job_id = 1;
   string name = 2;
   string account = 3;
-  string partition = 4;
-  string qos = 5;
+  string user = 4;
+  string partition = 5;
+  string qos = 6;
   /**
    * The job state field must include the following states:
    * PENDING, RUNNING, CANCELED, COMPLETED
@@ -29,34 +30,34 @@ message JobInfo {
    *   and has reached its intended conclusion.
    * Other possible states should be represented in uppercase letters.
    */
-  string state = 6;
+  string state = 7;
   // the number of CPUs requested by job
-  int32 cpus_req = 7;
+  int32 cpus_req = 8;
   // memory requested by job
-  int64 mem_req_mb = 8;
+  int64 mem_req_mb = 9;
   // the number of nodes requested by job
-  int32 nodes_req = 9;
-  int64 time_limit_minutes = 10;
-  google.protobuf.Timestamp submit_time = 11;
-  string working_directory = 12;
+  int32 nodes_req = 10;
+  int64 time_limit_minutes = 11;
+  google.protobuf.Timestamp submit_time = 12;
+  string working_directory = 13;
   // name of the file that stdout outputs to, relative to the working directory.
-  string stdout_path = 13;
+  optional string stdout_path = 14;
   // name of the file that stderr outputs to, relative to the working directory.
-  string stderr_path = 14;
-  optional google.protobuf.Timestamp start_time = 15;
-  optional int64 elapsed_seconds = 16;
+  optional string stderr_path = 15;
+  optional google.protobuf.Timestamp start_time = 16;
+  optional int64 elapsed_seconds = 17;
   // indicates why is the job in this state
-  optional string reason = 17;
-  optional string node_list = 18;
+  optional string reason = 18;
+  optional string node_list = 19;
   // the number of GPUs used by job
-  optional int32 gpus_alloc = 19;
+  optional int32 gpus_alloc = 20;
   // the number of CPUs used by job
-  optional int32 cpus_alloc = 20;
+  optional int32 cpus_alloc = 21;
   // memory used by job
-  optional int64 mem_alloc_mb = 21;
+  optional int64 mem_alloc_mb = 22;
   // the number of nodes used by job
-  optional int32 nodes_alloc = 22;
-  optional google.protobuf.Timestamp end_time = 23;
+  optional int32 nodes_alloc = 23;
+  optional google.protobuf.Timestamp end_time = 24;
 }
 
 
@@ -75,11 +76,13 @@ message GetJobsRequest {
 
   // filter options. The logical relationship between multiple filtering options is "AND". 
   message Filter {
-    optional string user = 1;
-    optional string account = 2;
-    optional string state = 3;
+    repeated string users = 1;
+    repeated string accounts = 2;
+    repeated string states = 3;
+    // if set this field, return jobs that submitted between the time range
+    optional TimeRange submit_time = 4;
     // if set this field, return jobs that ended between the time range
-    optional TimeRange end_time = 4;
+    optional TimeRange end_time = 5;
   }
   // specify filter options
   optional Filter filter = 2;
@@ -108,7 +111,7 @@ message GetJobByIdResponse {
 }
 
 message ChangeJobTimeLimitRequest {
-  string job_id = 1;
+  uint32 job_id = 1;
   // increase or decrease time limit
   int64 delta_minutes = 2;
 }
@@ -117,7 +120,7 @@ message ChangeJobTimeLimitResponse {
 }
 
 message QueryJobTimeLimitRequest {
-  string job_id = 1;
+  uint32 job_id = 1;
 }
 
 message QueryJobTimeLimitResponse {
@@ -128,15 +131,21 @@ message SubmitJobRequest {
   string user_id = 1;
   string job_name = 2;
   string account = 3;
+  // if not set, use a default partition
   string partition = 4;
   optional string qos = 5;
   uint32 node_count = 6;
   uint32 gpu_count = 7;
-  uint64 memory_mb = 8;
+  // if not set, use default memory size
+  optional uint64 memory_mb = 8;
   uint32 core_count = 9;
   optional uint32 time_limit_minutes = 10;
   string script = 11;
   string working_directory = 12;
+  // relative to working directory
+  string stdout = 13;
+  // relative to working directory
+  string stderr = 14;
 }
 
 message SubmitJobResponse {
