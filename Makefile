@@ -5,4 +5,7 @@ run:
 	go run *.go 
 
 build:
-	go build *.go
+	go build
+
+test:
+	go test

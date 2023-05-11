@@ -1,0 +1,32 @@
+name: Build and Upload scow-slurm-adapter Binary
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+        
+      - name: Test
+        # When unit test is ready, change this to true
+        if: false
+        run: make test
+
+      - name: Build binary
+        run: make build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: scow-slurm-adapter
+          path: ./scow-slurm-adapter
