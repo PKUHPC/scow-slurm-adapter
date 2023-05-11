@@ -203,6 +203,23 @@ func GetGpuAllocsFromGpuIdList(tresAlloc string, gpuId []int) int32 {
 	return gpusAlloc
 }
 
+func GetResInfoNumFromTresInfo(tresInfo string, resId int) int {
+	var resInfoNum int
+	resAllocList := strings.Split(tresInfo, ",")
+	for _, resInfo := range resAllocList {
+		resInfoKey := strings.Split(resInfo, "=")
+		id := resInfoKey[0]
+		idInt, _ := strconv.Atoi(id)
+		if idInt == resId {
+			tresNum := resInfoKey[1]
+			tresNumInt, _ := strconv.Atoi(tresNum)
+			resInfoNum = tresNumInt
+			return resInfoNum
+		}
+	}
+	return resInfoNum
+}
+
 func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, error) {
 	var errbuf bytes.Buffer
 	homePath, err := os.UserHomeDir()
@@ -335,5 +352,54 @@ func SearchUidNumberFromLdap(user string) (int, error) {
 		uid := searchResult.Entries[0].GetAttributeValue("uidNumber")
 		myIntUid, _ := strconv.Atoi(uid)
 		return myIntUid, nil
+	}
+}
+
+func SearchUserUidFromLdap(uid int) (string, error) {
+	// 配置文件中读取ldap的配置项
+	allSettings := config.ParseConfig()
+	ldapConnect := allSettings["ldap"]
+	ip := ldapConnect.(map[string]interface{})["ip"]
+	port := ldapConnect.(map[string]interface{})["port"]
+	baseDN := ldapConnect.(map[string]interface{})["basedn"]
+	bindDN := ldapConnect.(map[string]interface{})["binddn"]
+	password := ldapConnect.(map[string]interface{})["password"]
+
+	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
+	l, err := ldap.Dial("tcp", ldapUrl)
+	if err != nil {
+		fmt.Printf("Failed to connect to LDAP server: %s", err.Error())
+		return "", err
+	}
+	defer l.Close()
+
+	// 绑定到 LDAP 服务器，使用管理员账户进行查询
+	err = l.Bind(fmt.Sprintf("%v", bindDN), fmt.Sprintf("%v", password))
+	if err != nil {
+		fmt.Printf("Failed to bind to LDAP server: %s", err.Error())
+		return "", err
+	}
+
+	// 查询用户的 UID
+	searchRequest := ldap.NewSearchRequest(
+		fmt.Sprintf("%v", baseDN),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=posixAccount)(uidNumber=%d))", uid),
+		[]string{"uid"},
+		nil,
+	)
+	searchResult, err := l.Search(searchRequest)
+	if err != nil {
+		fmt.Printf("Failed to search LDAP server: %s", err.Error())
+		return "", err
+	}
+
+	// 打印查询结果
+	if len(searchResult.Entries) == 0 {
+		return "", errors.New("User not found.")
+	} else {
+		uid := searchResult.Entries[0].GetAttributeValue("uid")
+		// myIntUid, _ := strconv.Atoi(uid)
+		return uid, nil
 	}
 }
