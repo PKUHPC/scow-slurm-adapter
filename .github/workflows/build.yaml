@@ -19,6 +19,9 @@ jobs:
         with:
           go-version: stable
         
+      - name: PB Codegen
+        run: make protos
+        
       - name: Test
         # When unit test is ready, change this to true
         if: false
