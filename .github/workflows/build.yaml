@@ -2,8 +2,6 @@ name: Build and Upload scow-slurm-adapter Binary
 
 on:
   push:
-    branches:
-      - master
 
 jobs:
   build:
