@@ -8,11 +8,12 @@ import (
 	"math"
 	"net"
 	config "scow-slurm-adapter/config"
-	"scow-slurm-adapter/pb"
 	"scow-slurm-adapter/utils"
 	"strconv"
 	"strings"
 	"time"
+
+	pb "scow-slurm-adapter/gen/go"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/wxnacy/wgo/arrays"
