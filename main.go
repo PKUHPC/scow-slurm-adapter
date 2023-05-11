@@ -680,9 +680,9 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		totalNodes, _ := utils.RunCommand(totalNodesCmd)
 
 		// 将字符串转换为int
-		totalCpu, _ := strconv.Atoi(totalCpus)
-		totalMem, _ := strconv.Atoi(totalMems)
-		totalNodeNum, _ := strconv.Atoi(totalNodes)
+		totalCpuInt, _ := strconv.Atoi(totalCpus)
+		totalMemInt, _ := strconv.Atoi(totalMems)
+		totalNodeNumInt, _ := strconv.Atoi(totalNodes)
 
 		// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 		getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
@@ -710,7 +710,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalGpus = 0
 			} else {
 				perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
-				totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNum)
+				totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
 			}
 		}
 		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
@@ -721,15 +721,16 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		}
 		parts = append(parts, &pb.Partition{
 			Name:    partition,
-			MemMb:   uint64(totalMem),
-			Cores:   uint32(totalCpu),
+			MemMb:   uint64(totalMemInt),
+			Cores:   uint32(totalCpuInt),
 			Gpus:    totalGpus,
-			Nodes:   uint32(totalNodeNum),
+			Nodes:   uint32(totalNodeNumInt),
 			Qos:     qos,
 			Comment: &comment,
 		})
 	}
-	return &pb.GetClusterConfigResponse{Partitions: parts}, nil
+	// 增加调度器的名字, 针对于特定的适配器做的接口
+	return &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"}, nil
 }
 
 // job service
@@ -1575,13 +1576,24 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		scriptString += "#SBATCH " + "--time=" + strconv.Itoa(int(*in.TimeLimitMinutes)) + "\n"
 	}
 	scriptString += "#SBATCH " + "--chdir=" + in.WorkingDirectory + "\n"
-	scriptString += "#SBATCH " + "--output=" + in.Stdout + "\n"
-	scriptString += "#SBATCH " + "--error=" + in.Stderr + "\n"
+
+	if in.Stdout != nil {
+		scriptString += "#SBATCH " + "--output=" + *in.Stdout + "\n"
+	}
+	if in.Stderr != nil {
+		scriptString += "#SBATCH " + "--error=" + *in.Stderr + "\n"
+	}
 	if in.MemoryMb != nil {
 		scriptString += "#SBATCH " + "--mem=" + strconv.Itoa(int(*in.MemoryMb)) + "\n"
 	}
 	if in.GpuCount != 0 {
 		scriptString += "#SBATCH " + "--gres=gpu:" + strconv.Itoa(int(in.GpuCount)) + "\n"
+	}
+
+	if len(in.ExtraOptions) != 0 {
+		for _, extraVale := range in.ExtraOptions {
+			scriptString += "#SBATCH " + extraVale + "\n"
+		}
 	}
 
 	scriptString += "\n"
