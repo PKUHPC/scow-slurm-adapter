@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	pb "scow-slurm-adapter/pb"
+	pb "scow-slurm-adapter/gen/go"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +23,8 @@ func TestSubmitJob(t *testing.T) {
 	qos := "normal"
 	timeLimitMinutes := uint32(1)
 	memoryMb := uint64(200)
+	stdout := "slurm-%j.out"
+	stderr := "slurm-%j.out"
 	req := &pb.SubmitJobRequest{
 		UserId:           "test03",
 		JobName:          "test",
@@ -36,8 +38,8 @@ func TestSubmitJob(t *testing.T) {
 		TimeLimitMinutes: &timeLimitMinutes,
 		Script:           "sleep 100",
 		WorkingDirectory: "dffff",
-		Stdout:           "slurm-%j.out",
-		Stderr:           "slurm-%j.out",
+		Stdout:           &stdout,
+		Stderr:           &stderr,
 	}
 	res, err := client.SubmitJob(context.Background(), req)
 	if err != nil {

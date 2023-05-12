@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	pb "scow-slurm-adapter/pb"
+	pb "scow-slurm-adapter/gen/go"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
