@@ -1,0 +1,41 @@
+name: Build and Upload scow-slurm-adapter Binary
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - uses: bufbuild/buf-setup-action@v1.18.0
+        with:
+          github_token: ${{ github.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+        
+      - name: PB Codegen
+        run: make protos
+        
+      - name: Test
+        # When unit test is ready, change this to true
+        if: false
+        run: make test
+
+      - name: Build binary
+        run: CGO_BUILD=0 make build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: scow-slurm-adapter
+          path: ./scow-slurm-adapter

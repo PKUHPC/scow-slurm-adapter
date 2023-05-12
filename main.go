@@ -1576,7 +1576,6 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		scriptString += "#SBATCH " + "--time=" + strconv.Itoa(int(*in.TimeLimitMinutes)) + "\n"
 	}
 	scriptString += "#SBATCH " + "--chdir=" + in.WorkingDirectory + "\n"
-
 	if in.Stdout != nil {
 		scriptString += "#SBATCH " + "--output=" + *in.Stdout + "\n"
 	}
