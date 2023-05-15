@@ -21,7 +21,7 @@ func TestCreateAccount(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.CreateAccountRequest{
-		AccountName: "dddddsss",
+		AccountName: "dddddssswwww",
 		OwnerUserId: "test07",
 	}
 	_, err = client.CreateAccount(context.Background(), req)

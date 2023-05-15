@@ -44,13 +44,12 @@ func RunCommand(command string) (string, error) {
 }
 
 func DatabaseConfig() string {
-	allSettings := config.ParseConfig()
-	mysql := allSettings["mysql"]
-	host := mysql.(map[string]interface{})["host"]
-	userName := mysql.(map[string]interface{})["user"]
-	passWord := mysql.(map[string]interface{})["password"]
-	dbName := mysql.(map[string]interface{})["dbname"]
-	port := mysql.(map[string]interface{})["port"]
+	config := config.ParseConfig(config.DefaultConfigPath)
+	host := config.MySQLConfig.Host
+	userName := config.MySQLConfig.User
+	passWord := config.MySQLConfig.Password
+	dbName := config.MySQLConfig.DBName
+	port := config.MySQLConfig.Port
 
 	dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, "latin1")
 	return dbConfig
@@ -307,14 +306,12 @@ func SshSubmitJobCommand(hostName string, user string, script string, workingDir
 }
 
 func SearchUidNumberFromLdap(user string) (int, error) {
-	// 配置文件中读取ldap的配置项
-	allSettings := config.ParseConfig()
-	ldapConnect := allSettings["ldap"]
-	ip := ldapConnect.(map[string]interface{})["ip"]
-	port := ldapConnect.(map[string]interface{})["port"]
-	baseDN := ldapConnect.(map[string]interface{})["basedn"]
-	bindDN := ldapConnect.(map[string]interface{})["binddn"]
-	password := ldapConnect.(map[string]interface{})["password"]
+	config := config.ParseConfig(config.DefaultConfigPath)
+	ip := config.LDAPConfig.IP
+	port := config.LDAPConfig.Port
+	baseDN := config.LDAPConfig.BaseDN
+	bindDN := config.LDAPConfig.BindDN
+	password := config.LDAPConfig.Password
 
 	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
 	l, err := ldap.Dial("tcp", ldapUrl)
@@ -356,14 +353,12 @@ func SearchUidNumberFromLdap(user string) (int, error) {
 }
 
 func SearchUserUidFromLdap(uid int) (string, error) {
-	// 配置文件中读取ldap的配置项
-	allSettings := config.ParseConfig()
-	ldapConnect := allSettings["ldap"]
-	ip := ldapConnect.(map[string]interface{})["ip"]
-	port := ldapConnect.(map[string]interface{})["port"]
-	baseDN := ldapConnect.(map[string]interface{})["basedn"]
-	bindDN := ldapConnect.(map[string]interface{})["binddn"]
-	password := ldapConnect.(map[string]interface{})["password"]
+	config := config.ParseConfig(config.DefaultConfigPath)
+	ip := config.LDAPConfig.IP
+	port := config.LDAPConfig.Port
+	baseDN := config.LDAPConfig.BaseDN
+	bindDN := config.LDAPConfig.BindDN
+	password := config.LDAPConfig.Password
 
 	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
 	l, err := ldap.Dial("tcp", ldapUrl)

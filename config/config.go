@@ -1,34 +1,54 @@
 package congfig
 
 import (
-	"github.com/spf13/viper"
+	"io/ioutil"
+	"log"
+
+	"gopkg.in/yaml.v3"
 )
 
+type MySQLConfig struct {
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	User        string `yaml:"user"`
+	DBName      string `yaml:"dbname"`
+	Password    string `yaml:"password"`
+	ClusterName string `yaml:"clustername"`
+}
+
+type LDAPConfig struct {
+	IP       string `yaml:"ip"`
+	Port     int    `yaml:"port"`
+	BaseDN   string `yaml:"basedn"`
+	BindDN   string `yaml:"binddn"`
+	Password string `yaml:"password"`
+}
+
 type Config struct {
-	MysqlConfig `mapstructure:"mysql"`
+	MySQLConfig MySQLConfig `yaml:"mysql"`
+	LDAPConfig  LDAPConfig  `yaml:"ldap"`
+	LoginNodes  []string    `yaml:"loginNode"`
 }
 
-type MysqlConfig struct {
-	Host        string `mapstructure:"host"`
-	Port        int    `mapstructure:"port"`
-	User        string `mapstructure:"user"`
-	DbName      string `mapstructure:"dbname"`
-	PassWord    string `mapstructure:"password"`
-	ClusterName string `mapstructure:"clustername"`
+var (
+	DefaultConfigPath string
+)
+
+func init() {
+	DefaultConfigPath = "../scow-slurm-adapter/config/config.yaml"
 }
 
-func ParseConfig() map[string]interface{} {
-	// 读取配置文件内容
-	config := viper.New()
-	config.AddConfigPath("./config")
-	config.SetConfigName("config")
-	config.SetConfigType("yaml")
-
-	if err := config.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			panic(err)
-		}
+func ParseConfig(configFilePath string) *Config {
+	confFile, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		log.Fatal(err)
 	}
-	allSettings := config.AllSettings()
-	return allSettings
+	config := &Config{}
+
+	err = yaml.Unmarshal(confFile, config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return config
 }

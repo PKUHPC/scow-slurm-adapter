@@ -23,6 +23,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var configValue *config.Config
+var db *sql.DB
+
 type serverUser struct {
 	pb.UnimplementedUserServiceServer
 }
@@ -39,6 +42,16 @@ type serverJob struct {
 	pb.UnimplementedJobServiceServer
 }
 
+func init() {
+	configValue = config.ParseConfig(config.DefaultConfigPath)
+	dbConfig := utils.DatabaseConfig()
+	var err error
+	db, err = sql.Open("mysql", dbConfig)
+	if err != nil {
+		panic(err)
+	}
+}
+
 // UserService
 func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccountRequest) (*pb.AddUserToAccountResponse, error) {
 	var (
@@ -48,16 +61,11 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		user     string
 		qosList  []string
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed.").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exists.").Err()
 	}
@@ -124,16 +132,11 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		jobList  []string
 		acctList []string
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed.").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s'", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
@@ -223,16 +226,11 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		userName string
 		user     string
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
@@ -263,16 +261,11 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		user          string
 		maxSubmitJobs int
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
@@ -308,16 +301,11 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		user          string
 		maxSubmitJobs int
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
@@ -347,17 +335,12 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		assocAcct string
 		acctList  []string
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	// 判断用户是否存在
 	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	err := db.QueryRow(userSqlConfig).Scan(&userName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
 	}
@@ -388,13 +371,8 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		qosName  string
 		qosList  []string
 	)
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
 
-	_, err = utils.SearchUidNumberFromLdap(in.OwnerUserId)
+	_, err := utils.SearchUidNumberFromLdap(in.OwnerUserId)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
 	}
@@ -442,16 +420,11 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		assocAcctName string
 		acctList      []string
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
 	}
@@ -503,13 +476,8 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 	var (
 		acctName string
 	)
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The account does not exists.").Err()
 	}
@@ -541,14 +509,8 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		acctList      []string
 		acctInfo      []*pb.ClusterAccountInfo
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	// 多行数据的搜索
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where deleted = 0")
 	rows, err := db.Query(acctSqlConfig)
@@ -634,13 +596,8 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	var (
 		acctName string
 	)
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
 	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The account does not exists.").Err()
 	}
@@ -742,18 +699,13 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		loginName               string
 		loginNodeStatusResponse bool = false
 	)
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	loginNodes := allConfigs["loginnode"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+	loginNodes := configValue.LoginNodes
+
 	// 判断用户是否存在
 	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	err := db.QueryRow(userSqlConfig).Scan(&userName)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
 	}
@@ -765,11 +717,10 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		return nil, status.New(codes.NotFound, "The job not found.").Err()
 	}
 	// 检测登录节点的存活状态
-	for _, v := range loginNodes.([]interface{}) {
-		loginNodeString := fmt.Sprintf("%v", v)
-		loginNodeStatusResponse = utils.Ping(loginNodeString)
+	for _, v := range loginNodes {
+		loginNodeStatusResponse = utils.Ping(v)
 		if loginNodeStatusResponse {
-			loginName = loginNodeString
+			loginName = v
 			break
 		}
 	}
@@ -787,17 +738,11 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 
 func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLimitRequest) (*pb.QueryJobTimeLimitResponse, error) {
 	var timeLimit uint64
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	// 通过jobId来查找作业信息
 	jobSqlConfig := fmt.Sprintf("select timelimit from %s_job_table where id_job = %d", clusterName, in.JobId)
-	err = db.QueryRow(jobSqlConfig).Scan(&timeLimit)
+	err := db.QueryRow(jobSqlConfig).Scan(&timeLimit)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
 	}
@@ -806,17 +751,12 @@ func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 
 func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTimeLimitRequest) (*pb.ChangeJobTimeLimitResponse, error) {
 	var idJob int
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	// 判断作业在不在排队、运行、暂停的状态
 	jobSqlConfig := fmt.Sprintf("select id_job from %s_job_table where id_job = %d and state in (0, 1, 2)", clusterName, in.JobId)
-	err = db.QueryRow(jobSqlConfig).Scan(&idJob)
+	err := db.QueryRow(jobSqlConfig).Scan(&idJob)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
 	}
@@ -870,16 +810,11 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		gpuIdList        []int
 	)
 	var fields []string = in.Fields
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	jobSqlConfig := fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_job = %d", clusterName, in.JobId)
-	err = db.QueryRow(jobSqlConfig).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
+	err := db.QueryRow(jobSqlConfig).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 	if err != nil {
 		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
 	}
@@ -1143,14 +1078,9 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		jobInfo           []*pb.JobInfo
 	)
 	var fields []string = in.Fields
-	allConfigs := config.ParseConfig()
-	mysql := allConfigs["mysql"]
-	clusterName := mysql.(map[string]interface{})["clustername"]
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, "Database connection failed!").Err()
-	}
+
+	clusterName := configValue.MySQLConfig.ClusterName
+
 	// 查找SelectType插件的值
 	slurmSelectTypeConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
 	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
@@ -1540,15 +1470,15 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	var loginName string
 	var loginNodeStatusResponse bool = false
 
-	allConfigs := config.ParseConfig()
-	loginNodes := allConfigs["loginnode"]
+	loginNodes := configValue.LoginNodes
 
 	// 检测登录节点的存活状态
-	for _, v := range loginNodes.([]interface{}) {
-		loginNodeString := fmt.Sprintf("%v", v)
-		loginNodeStatusResponse = utils.Ping(loginNodeString)
+
+	for _, v := range loginNodes {
+		// loginNodeString := fmt.Sprintf("%v", v)
+		loginNodeStatusResponse = utils.Ping(v)
 		if loginNodeStatusResponse {
-			loginName = loginNodeString
+			loginName = v
 			break
 		}
 	}

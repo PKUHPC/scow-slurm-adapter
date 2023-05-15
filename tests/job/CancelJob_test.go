@@ -22,7 +22,7 @@ func TestCancelJob(t *testing.T) {
 	// Call the Add RPC with test data
 	req := &pb.CancelJobRequest{
 		UserId: "test02",
-		JobId:  1271,
+		JobId:  1276,
 	}
 	_, err = client.CancelJob(context.Background(), req)
 	if err != nil {
