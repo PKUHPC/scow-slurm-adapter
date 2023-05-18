@@ -83,7 +83,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	}
 
 	// 查询系统中的base Qos
-	qosSqlConfig := "SELECT name FROM qos_table"
+	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 	rows, err := db.Query(qosSqlConfig)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -559,7 +559,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 	if err != nil {
 		partitions, _ := utils.GetPatitionInfo() // 获取系统中计算分区信息
 		// 获取系统中Qos
-		qosSqlConfig := fmt.Sprintf("SELECT name FROM qos_table")
+		qosSqlConfig := fmt.Sprintf("SELECT name FROM qos_table WHERE deleted = 0")
 		rows, err := db.Query(qosSqlConfig)
 		if err != nil {
 			errInfo := &errdetails.ErrorInfo{
@@ -870,7 +870,44 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 // config service
 func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterConfigRequest) (*pb.GetClusterConfigResponse, error) {
 	var parts []*pb.Partition // 定义返回的类型
+	var qosName string
+	var qosList []string
 	partitions, _ := utils.GetPatitionInfo()
+
+	// 查系统中的所有qos
+	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
+	rows, err := db.Query(qosSqlConfig)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&qosName)
+		if err != nil {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		qosList = append(qosList, qosName)
+	}
+	err = rows.Err()
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	log.Println(qosList)
 	for _, partition := range partitions {
 		var (
 			totalGpus uint32
@@ -925,8 +962,20 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
 		qosOutput, _ := utils.RunCommand(getPartitionQosCmd)
 		qosArray := strings.Split(qosOutput, "=")
+
+		// 获取AllowQos
+		getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
+		// 返回的是字符串
+		allowQosOutput, _ := utils.RunCommand(getPartitionAllowQosCmd)
+
 		if qosArray[len(qosArray)-1] != "N/A" {
 			qos = append(qos, qosArray[len(qosArray)-1])
+		} else {
+			if allowQosOutput == "ALL" {
+				qos = qosList
+			} else {
+				qos = strings.Split(allowQosOutput, ",")
+			}
 		}
 		parts = append(parts, &pb.Partition{
 			Name:    partition,
@@ -939,6 +988,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		})
 	}
 	// 增加调度器的名字, 针对于特定的适配器做的接口
+	log.Println(parts)
 	return &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"}, nil
 }
 
@@ -1628,8 +1678,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
-		qosSqlConfig := fmt.Sprintf("select name in qos_table where id = %d", idQos)
-		db.QueryRow(qosSqlConfig).Scan(&qosName)
+		// qosSqlConfig := fmt.Sprintf("select name in qos_table where id = %d", idQos)
+		// db.QueryRow(qosSqlConfig).Scan(&qosName)
 		stateString = utils.ChangeState(state)
 		submitTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(submitTime, 0).Unix())}
 		startTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
@@ -1638,8 +1688,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		// username 转换，需要从ldap中拿数据
 		userName, _ := utils.SearchUserUidFromLdap(idUser)
 
-		qosSqlconfig := fmt.Sprintf("select name from qos_table where id = %d", idQos)
-		db.QueryRow(qosSqlconfig).Scan(&qosName)
+		qosSqlconfig := "SELECT name FROM qos_table WHERE id = ?"
+		db.QueryRow(qosSqlconfig, idQos).Scan(&qosName)
 
 		if state == 0 || state == 2 {
 			getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
