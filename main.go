@@ -559,7 +559,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 	if err != nil {
 		partitions, _ := utils.GetPatitionInfo() // 获取系统中计算分区信息
 		// 获取系统中Qos
-		qosSqlConfig := fmt.Sprintf("SELECT name FROM qos_table WHERE deleted = 0")
+		qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 		rows, err := db.Query(qosSqlConfig)
 		if err != nil {
 			errInfo := &errdetails.ErrorInfo{
@@ -1678,8 +1678,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
-		// qosSqlConfig := fmt.Sprintf("select name in qos_table where id = %d", idQos)
-		// db.QueryRow(qosSqlConfig).Scan(&qosName)
 		stateString = utils.ChangeState(state)
 		submitTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(submitTime, 0).Unix())}
 		startTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
@@ -1688,7 +1686,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		// username 转换，需要从ldap中拿数据
 		userName, _ := utils.SearchUserUidFromLdap(idUser)
 
-		qosSqlconfig := "SELECT name FROM qos_table WHERE id = ?"
+		qosSqlconfig := "SELECT name FROM qos_table WHERE id = ? AND deleted = 0"
 		db.QueryRow(qosSqlconfig, idQos).Scan(&qosName)
 
 		if state == 0 || state == 2 {
@@ -1869,6 +1867,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
 	}
+	log.Println(jobInfo)
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }
 
