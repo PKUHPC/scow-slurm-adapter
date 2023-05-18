@@ -22,7 +22,7 @@ func TestUnblockUserInAccount(t *testing.T) {
 	// Call the Add RPC with test data
 	req := &pb.UnblockUserInAccountRequest{
 		UserId:      "test07",
-		AccountName: "a_admin",
+		AccountName: "w_admin",
 	}
 	_, err = client.UnblockUserInAccount(context.Background(), req)
 	if err != nil {

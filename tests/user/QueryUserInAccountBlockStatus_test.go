@@ -22,7 +22,7 @@ func TestQueryUserInAccountBlockStatus(t *testing.T) {
 	// Call the Add RPC with test data
 	req := &pb.QueryUserInAccountBlockStatusRequest{
 		UserId:      "test07",
-		AccountName: "a_admin",
+		AccountName: "w_admin",
 	}
 	_, err = client.QueryUserInAccountBlockStatus(context.Background(), req)
 	if err != nil {

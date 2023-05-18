@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log"
 
 	"fmt"
 	"math"
@@ -17,6 +18,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/wxnacy/wgo/arrays"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,12 +46,6 @@ type serverJob struct {
 
 func init() {
 	configValue = config.ParseConfig(config.DefaultConfigPath)
-	dbConfig := utils.DatabaseConfig()
-	var err error
-	db, err = sql.Open("mysql", dbConfig)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // UserService
@@ -64,40 +60,69 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	// 字符串拼接改成占位符防止注入
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	_, err = utils.SearchUidNumberFromLdap(in.UserId)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	// 查询系统中的base Qos
-	qosSqlConfig := fmt.Sprintf("select name from qos_table")
+	qosSqlConfig := "SELECT name FROM qos_table"
 	rows, err := db.Query(qosSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&qosName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		qosList = append(qosList, qosName)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
+
 	baseQos := strings.Join(qosList, ",") // 系统中获取的baseQos的值
 	// 查询用户是否在系统中
 	partitions, _ := utils.GetPatitionInfo()
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
+
 	if err != nil {
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
@@ -107,8 +132,9 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		}
 		return &pb.AddUserToAccountResponse{}, nil
 	}
-	assocSqlConfig := fmt.Sprintf("select distinct user from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(assocSqlConfig).Scan(&user)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
+
 	if err != nil {
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
@@ -119,7 +145,12 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		return &pb.AddUserToAccountResponse{}, nil
 	}
 	// 关联已经存在的情况
-	return nil, status.New(codes.AlreadyExists, "The user already exists in account.").Err()
+	errInfo := &errdetails.ErrorInfo{
+		Reason: "USER_ALREADY_EXISTS",
+	}
+	st := status.New(codes.AlreadyExists, "The user already exists in account.")
+	st, _ = st.WithDetails(errInfo)
+	return nil, st.Err()
 }
 
 func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUserFromAccountRequest) (*pb.RemoveUserFromAccountResponse, error) {
@@ -135,70 +166,125 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s'", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// ldap中不存在，slurm中的user中肯定不存在
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
-	assocSqlConfig := fmt.Sprintf("select distinct user from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(assocSqlConfig).Scan(&user)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "User and account assocation is not exists!").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	// 关联关系存在的情况下
-	assocAcctSqlConfig := fmt.Sprintf("select distinct acct from %s_assoc_table where user = '%s' and deleted = 0 and acct != '%s'", clusterName, in.UserId, in.AccountName)
-	rows, err := db.Query(assocAcctSqlConfig)
+	assocAcctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0 AND acct != ?", clusterName)
+	rows, err := db.Query(assocAcctSqlConfig, in.UserId, in.AccountName)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&acct)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		acctList = append(acctList, acct)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	uid, err := utils.SearchUidNumberFromLdap(in.UserId)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
-	jobSqlConfig := fmt.Sprintf("select job_name from %s_job_table where id_user = %d and account  = '%s' and state in (0, 1, 2)", clusterName, uid, in.AccountName)
-	jobRows, err := db.Query(jobSqlConfig)
+	jobSqlConfig := fmt.Sprintf("SELECT job_name FROM %s_job_table WHERE id_user = ? AND account = ? AND state IN (0, 1, 2)", clusterName)
+	jobRows, err := db.Query(jobSqlConfig, uid, in.AccountName)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer jobRows.Close()
 	for jobRows.Next() {
 		err := jobRows.Scan(&jobName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The job query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		jobList = append(jobList, jobName)
 	}
 	err = jobRows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	if len(acctList) == 0 {
 		// 有作业直接出错返回
 		if len(jobList) != 0 {
-			return nil, status.New(codes.Internal, "This user have running jobs!").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "RUNNING_JOB_EXISTS",
+			}
+			st := status.New(codes.Internal, "This user have running jobs!")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 
 		// 没作业下直接删除用户
@@ -207,11 +293,21 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		if res == 0 {
 			return &pb.RemoveUserFromAccountResponse{}, nil
 		}
-		return nil, status.New(codes.Internal, "Shell command execute falied!").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXECUTE_FAILED",
+		}
+		st := status.New(codes.Internal, "Shell command execute falied!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 更改默认账号
 	if len(jobList) != 0 {
-		return nil, status.New(codes.Internal, "This user is running some jobs!").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "RUNNING_JOB_EXISTS",
+		}
+		st := status.New(codes.Internal, "This user have running jobs!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	updateDefaultAcctCmd := fmt.Sprintf("sacctmgr -i update user set DefaultAccount=%s where user=%s", acctList[0], in.UserId)
 	utils.ExecuteShellCommand(updateDefaultAcctCmd)
@@ -229,21 +325,37 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// ldap中不存在的话在slurm的user表中肯定也不存在
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
-	assocSqlConfig := fmt.Sprintf("select distinct user from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(assocSqlConfig).Scan(&user)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
+
 	if err != nil {
-		return nil, status.New(codes.NotFound, "User and account assocation is not exists!").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 关联存在的情况下直接封锁账户
 	blockUserCmd := fmt.Sprintf("sacctmgr -i -Q modify user where name=%s account=%s set MaxSubmitJobs=0  MaxJobs=0 MaxWall=00:00:00  GrpJobs=0 GrpSubmit=0 GrpSubmitJobs=0 MaxSubmitJobs=0 GrpWall=00:00:00", in.UserId, in.AccountName)
@@ -251,7 +363,12 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	if res == 0 {
 		return &pb.BlockUserInAccountResponse{}, nil
 	}
-	return nil, status.New(codes.Internal, "Shell command execute falied!").Err()
+	errInfo := &errdetails.ErrorInfo{
+		Reason: "COMMAND_EXECUTE_FAILED",
+	}
+	st := status.New(codes.Internal, "Shell command execute falied!")
+	st, _ = st.WithDetails(errInfo)
+	return nil, st.Err()
 }
 
 func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUserInAccountRequest) (*pb.UnblockUserInAccountResponse, error) {
@@ -264,24 +381,39 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
-	assocSqlConfig := fmt.Sprintf("select distinct user from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(assocSqlConfig).Scan(&user)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user is not associated with the account").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 最大提交作业数为NULL表示没被封锁
-	maxSubmitJobsSqlConfig := fmt.Sprintf("select distinct max_submit_jobs from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(maxSubmitJobsSqlConfig).Scan(&maxSubmitJobs)
+	maxSubmitJobsSqlConfig := fmt.Sprintf("SELECT DISTINCT max_submit_jobs FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(maxSubmitJobsSqlConfig, in.UserId, in.AccountName).Scan(&maxSubmitJobs)
 	if err != nil {
 		return &pb.UnblockUserInAccountResponse{}, nil
 	}
@@ -291,7 +423,12 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 	if res == 0 {
 		return &pb.UnblockUserInAccountResponse{}, nil
 	}
-	return nil, status.New(codes.Internal, "Shell command execute falied!").Err()
+	errInfo := &errdetails.ErrorInfo{
+		Reason: "COMMAND_EXECUTE_FAILED",
+	}
+	st := status.New(codes.Internal, "Shell command execute falied!")
+	st, _ = st.WithDetails(errInfo)
+	return nil, st.Err()
 }
 
 func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.QueryUserInAccountBlockStatusRequest) (*pb.QueryUserInAccountBlockStatusResponse, error) {
@@ -304,24 +441,39 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
-	assocSqlConfig := fmt.Sprintf("select distinct user from %s_assoc_table where user = '%s' and acct  = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(assocSqlConfig).Scan(&user)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user is not associated with the account").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
-	maxSubmitJobSqlConfig := fmt.Sprintf("select distinct max_submit_jobs from %s_assoc_table where user = '%s' and acct = '%s' and deleted = 0", clusterName, in.UserId, in.AccountName)
-	err = db.QueryRow(maxSubmitJobSqlConfig).Scan(&maxSubmitJobs)
+	maxSubmitJobSqlConfig := fmt.Sprintf("SELECT DISTINCT max_submit_jobs FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(maxSubmitJobSqlConfig, in.UserId, in.AccountName).Scan(&maxSubmitJobs)
 	if err != nil {
 		return &pb.QueryUserInAccountBlockStatusResponse{Blocked: false}, nil
 	}
@@ -339,28 +491,48 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 判断用户是否存在
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err := db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 查询和用户相关的账户信息
-	assocSqlConfig := fmt.Sprintf("select acct from %s_assoc_table where user = '%s' and deleted = 0", clusterName, in.UserId)
-	rows, err := db.Query(assocSqlConfig)
+	assocSqlConfig := fmt.Sprintf("SELECT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0", clusterName)
+	rows, err := db.Query(assocSqlConfig, in.UserId)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&assocAcct)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		acctList = append(acctList, assocAcct)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	return &pb.ListAccountsResponse{Accounts: acctList}, nil
 }
@@ -374,31 +546,51 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 
 	_, err := utils.SearchUidNumberFromLdap(in.OwnerUserId)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err = db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
 		partitions, _ := utils.GetPatitionInfo() // 获取系统中计算分区信息
 		// 获取系统中Qos
-		qosSqlConfig := fmt.Sprintf("select name from qos_table")
+		qosSqlConfig := fmt.Sprintf("SELECT name FROM qos_table")
 		rows, err := db.Query(qosSqlConfig)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		defer rows.Close()
 		for rows.Next() {
 			err := rows.Scan(&qosName)
 			if err != nil {
-				return nil, status.New(codes.Internal, "Database query failed.").Err()
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "SQL_QUERY_FAILED",
+				}
+				st := status.New(codes.Internal, "Sql query failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
 			}
 			qosList = append(qosList, qosName)
 		}
 
 		err = rows.Err()
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		baseQos := strings.Join(qosList, ",")
 		createAccountCmd := fmt.Sprintf("sacctmgr -i create account name=%s", in.AccountName)
@@ -411,7 +603,12 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		}
 		return &pb.CreateAccountResponse{}, nil
 	}
-	return nil, status.New(codes.AlreadyExists, "The account is already exists.").Err()
+	errInfo := &errdetails.ErrorInfo{
+		Reason: "ACCOUNT_ALREADY_EXISTS",
+	}
+	st := status.New(codes.AlreadyExists, "The account is already exists.")
+	st, _ = st.WithDetails(errInfo)
+	return nil, st.Err()
 }
 
 func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountRequest) (*pb.BlockAccountResponse, error) {
@@ -423,31 +620,51 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "Account does not exist.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	partitions, _ := utils.GetPatitionInfo()
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
 	output, _ := utils.RunCommand(getAllowAcctCmd)
 	if output == "ALL" {
-		acctSqlConfig := fmt.Sprintf("select DISTINCT acct from %s_assoc_table where deleted=0 and acct != '%s'", clusterName, in.AccountName)
-		rows, err := db.Query(acctSqlConfig)
+		acctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE deleted = 0 AND acct != ?", clusterName)
+		rows, err := db.Query(acctSqlConfig, in.AccountName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		defer rows.Close()
 		for rows.Next() {
 			err := rows.Scan(&assocAcctName)
 			if err != nil {
-				return nil, status.New(codes.Internal, "Database query failed.").Err()
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "SQL_QUERY_FAILED",
+				}
+				st := status.New(codes.Internal, "Sql query failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
 			}
 			acctList = append(acctList, assocAcctName)
 		}
 		err = rows.Err()
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		allowAcct := strings.Join(acctList, ",")
 		for _, v := range partitions {
@@ -476,10 +693,15 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 	var (
 		acctName string
 	)
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The account does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	partitions, _ := utils.GetPatitionInfo()
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
@@ -512,22 +734,37 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 多行数据的搜索
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where deleted = 0")
+	acctSqlConfig := fmt.Sprintf("SELECT name FROM acct_table WHERE deleted = 0")
 	rows, err := db.Query(acctSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&acctName)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		acctList = append(acctList, acctName)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	// 查询allowAcct的值(ALL和具体的acct列表)
@@ -537,10 +774,15 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 
 	for _, v := range acctList {
 		var userInfo []*pb.ClusterAccountInfo_UserInAccount
-		assocSqlConfig := fmt.Sprintf("select distinct user, max_submit_jobs from %s_assoc_table where deleted = 0 and acct = '%s' and user != '' ", clusterName, v)
-		rows, err := db.Query(assocSqlConfig)
+		assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user, max_submit_jobs FROM %s_assoc_table WHERE deleted = 0 AND acct = ? AND user != ''", clusterName)
+		rows, err := db.Query(assocSqlConfig, v)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The user query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		defer rows.Close()
 		for rows.Next() {
@@ -563,7 +805,12 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		}
 		err = rows.Err()
 		if err != nil {
-			return nil, status.New(codes.Internal, "The user query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		if output == "ALL" {
 			acctInfo = append(acctInfo, &pb.ClusterAccountInfo{
@@ -596,10 +843,15 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	var (
 		acctName string
 	)
-	acctSqlConfig := fmt.Sprintf("select name from acct_table where name = '%s' and deleted = 0", in.AccountName)
-	err := db.QueryRow(acctSqlConfig).Scan(&acctName)
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The account does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	partitions, _ := utils.GetPatitionInfo()
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
@@ -704,17 +956,27 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 	loginNodes := configValue.LoginNodes
 
 	// 判断用户是否存在
-	userSqlConfig := fmt.Sprintf("select name from user_table where name = '%s' and deleted = 0", in.UserId)
-	err := db.QueryRow(userSqlConfig).Scan(&userName)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 用户存在的情况去查作业的情况
-	jobSqlConfig := fmt.Sprintf("select id_job from %s_job_table where id_job = %d and state in (0, 1, 2)", clusterName, in.JobId)
-	err = db.QueryRow(jobSqlConfig).Scan(&idJob)
+	jobSqlConfig := fmt.Sprintf("SELECT id_job FROM %s_job_table WHERE id_job = ? AND state IN (0, 1, 2)", clusterName)
+	err = db.QueryRow(jobSqlConfig, in.JobId).Scan(&idJob)
 	if err != nil {
 		// 不存在或者作业已经完成
-		return nil, status.New(codes.NotFound, "The job not found.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "JOB_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The job does not exist.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 检测登录节点的存活状态
 	for _, v := range loginNodes {
@@ -725,13 +987,23 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		}
 	}
 	if loginNodeStatusResponse == false {
-		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "LOGIN_NODE_UNAVAILABLE",
+		}
+		st := status.New(codes.Unavailable, "The login nodes all dead.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	host := fmt.Sprintf("%s:%d", loginName, 22)
 	scancelJobCmd := fmt.Sprintf("scancel %d", in.JobId)
 	scancelJobRes, err := utils.SshExectueShellCmd(host, in.UserId, scancelJobCmd)
 	if err != nil {
-		return nil, status.New(codes.NotFound, strings.Join(scancelJobRes, " ")).Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "CANCEL_JOB_FAILED",
+		}
+		st := status.New(codes.Unknown, strings.Join(scancelJobRes, " "))
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	return &pb.CancelJobResponse{}, nil
 }
@@ -741,10 +1013,15 @@ func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 通过jobId来查找作业信息
-	jobSqlConfig := fmt.Sprintf("select timelimit from %s_job_table where id_job = %d", clusterName, in.JobId)
-	err := db.QueryRow(jobSqlConfig).Scan(&timeLimit)
+	jobSqlConfig := fmt.Sprintf("SELECT timelimit FROM %s_job_table WHERE id_job = ?", clusterName)
+	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&timeLimit)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "JOB_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The job does not exist.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	return &pb.QueryJobTimeLimitResponse{TimeLimitMinutes: timeLimit}, nil
 }
@@ -755,10 +1032,15 @@ func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 判断作业在不在排队、运行、暂停的状态
-	jobSqlConfig := fmt.Sprintf("select id_job from %s_job_table where id_job = %d and state in (0, 1, 2)", clusterName, in.JobId)
-	err := db.QueryRow(jobSqlConfig).Scan(&idJob)
+	jobSqlConfig := fmt.Sprintf("SELECT id_job FROM %s_job_table WHERE id_job = ? AND state IN (0, 1, 2)", clusterName)
+	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&idJob)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "JOB_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The job does not exist.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	if in.DeltaMinutes >= 0 {
 		updateTimeLimitCmd := fmt.Sprintf("scontrol update job=%d TimeLimit+=%d", in.JobId, in.DeltaMinutes)
@@ -813,16 +1095,21 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	jobSqlConfig := fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_job = %d", clusterName, in.JobId)
-	err := db.QueryRow(jobSqlConfig).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
+	jobSqlConfig := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, partition, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_job = ?", clusterName)
+	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The job does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "JOB_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The job does not exist.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	// cputresId、memTresId、nodeTresId
-	cpuTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'cpu'")
-	memTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'mem'")
-	nodeTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'node'")
+	cpuTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'cpu'"
+	memTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'mem'"
+	nodeTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'node'"
 	db.QueryRow(cpuTresSqlConfig).Scan(&cpuTresId)
 	db.QueryRow(memTresSqlConfig).Scan(&memTresId)
 	db.QueryRow(nodeTresSqlConfig).Scan(&nodeTresId)
@@ -835,29 +1122,44 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	// username 转换，需要从ldap中拿数据
 	userName, _ := utils.SearchUserUidFromLdap(idUser)
 
-	qosSqlconfig := fmt.Sprintf("select name from qos_table where id = %d", idQos)
-	db.QueryRow(qosSqlconfig).Scan(&qosName)
+	qosSqlConfig := "SELECT name FROM qos_table WHERE id = ?"
+	db.QueryRow(qosSqlConfig, idQos).Scan(&qosName)
 
 	// 查找SelectType插件的值
 	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
 	output, _ := utils.RunCommand(slurmConfigCmd)
 
-	gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gredds' and deleted = 0")
+	gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
 	rows, err := db.Query(gpuSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&gpuId)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		gpuIdList = append(gpuIdList, gpuId)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	if state == 0 || state == 2 {
@@ -1076,6 +1378,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		uidList           []int
 		stateIdList       []int
 		jobInfo           []*pb.JobInfo
+		params            []interface{}
+		totalParams       []interface{}
 	)
 	var fields []string = in.Fields
 
@@ -1086,29 +1390,44 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
 
 	// cputresId、memTresId、nodeTresId
-	cpuTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'cpu'")
-	memTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'mem'")
-	nodeTresSqlConfig := fmt.Sprintf("select id from tres_table where type = 'node'")
+	cpuTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'cpu'"
+	memTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'mem'"
+	nodeTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'node'"
 	db.QueryRow(cpuTresSqlConfig).Scan(&cpuTresId)
 	db.QueryRow(memTresSqlConfig).Scan(&memTresId)
 	db.QueryRow(nodeTresSqlConfig).Scan(&nodeTresId)
 
-	gpuSqlConfig := fmt.Sprintf("select id from tres_table where type = 'gres' and deleted = 0")
+	gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
 	rowList, err := db.Query(gpuSqlConfig)
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rowList.Close()
 	for rowList.Next() {
 		err := rowList.Scan(&gpuId)
 		if err != nil {
-			return nil, status.New(codes.Internal, "Database query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		gpuIdList = append(gpuIdList, gpuId)
 	}
 	err = rowList.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "Database query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	if in.PageInfo != nil {
@@ -1142,13 +1461,17 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_user in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where id_user in (%s) and state  in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, partition, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString, stateIdListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s) and id_user in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountsString, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where account in (%s) and id_user in (%s) and state  in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
 				for _, user := range in.Filter.Users {
@@ -1157,13 +1480,17 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s) and id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountsString, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where account in (%s) and id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) == 0 && len(in.Filter.States) != 0 {
 				for _, state := range in.Filter.States {
@@ -1172,28 +1499,37 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, stateIdListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountsString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where account in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, stateIdListString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else {
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0) order by id_job limit %d offset %d", clusterName, accountsString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize)
-					jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table where account in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString)
+					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			}
 		} else {
-			jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table limit %d offset %d", clusterName, pageLimit, pageSize)
-			jobSqlTotalConfig = fmt.Sprintf("select count(*) from %s_job_table", clusterName)
+			jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table LIMIT ? OFFSET ?", clusterName)
+			params = []interface{}{pageLimit, pageSize}
+			jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table", clusterName)
 		}
 	} else {
 		// 不分页的情况
@@ -1219,11 +1555,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_user in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s)  and id_user in (%s) and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, uidListString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
 				for _, user := range in.Filter.Users {
@@ -1232,11 +1570,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s)  and id_user in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, uidListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) == 0 && len(in.Filter.States) != 0 {
 				for _, state := range in.Filter.States {
@@ -1245,34 +1585,48 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s)  and state in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, stateIdListString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, stateIdListString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else {
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table where account in (%s) and (time_end > %d or %d = 0) and (time_end < %d or %d = 0) and (time_submit > %d or %d = 0) and (time_submit < %d or %d = 0)", clusterName, accountsString, startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString)
+					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			}
 		} else {
-			jobSqlConfig = fmt.Sprintf("select account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req from %s_job_table", clusterName)
+			jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table", clusterName)
 		}
 	}
-	rows, err := db.Query(jobSqlConfig)
+	rows, err := db.Query(jobSqlConfig, params...)
 	if err != nil {
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 		if err != nil {
-			return nil, status.New(codes.Internal, "The job query failed.").Err()
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, "Sql query failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 		qosSqlConfig := fmt.Sprintf("select name in qos_table where id = %d", idQos)
 		db.QueryRow(qosSqlConfig).Scan(&qosName)
@@ -1448,11 +1802,16 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, status.New(codes.Internal, "The job query failed.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, "Sql query failed.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	// 获取总的页数逻辑
 	if jobSqlTotalConfig != "" {
-		db.QueryRow(jobSqlTotalConfig).Scan(&count)
+		db.QueryRow(jobSqlTotalConfig, totalParams...).Scan(&count)
 		if count%pageLimit == 0 {
 			totalCount = uint32(count) / uint32(pageLimit)
 		} else {
@@ -1475,7 +1834,6 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	// 检测登录节点的存活状态
 
 	for _, v := range loginNodes {
-		// loginNodeString := fmt.Sprintf("%v", v)
 		loginNodeStatusResponse = utils.Ping(v)
 		if loginNodeStatusResponse {
 			loginName = v
@@ -1483,15 +1841,23 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		}
 	}
 	if loginNodeStatusResponse == false {
-		return nil, status.New(codes.NotFound, "The login nodes all dead.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "LOGIN_NODE_UNAVAILABLE",
+		}
+		st := status.New(codes.Unavailable, "The login nodes all dead.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
-	dbConfig := utils.DatabaseConfig()
-	db, err := sql.Open("mysql", dbConfig)
-	userSqlConfig := fmt.Sprintf("select name from user_table where deleted = 0 and name = '%s'", in.UserId)
-	err = db.QueryRow(userSqlConfig).Scan(&name)
+	userSqlConfig := "SELECT name FROM user_table WHERE deleted = 0 AND name = ?"
+	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&name)
 	if err != nil {
-		return nil, status.New(codes.NotFound, "The user does not exists.").Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 
 	scriptString += "#SBATCH " + "-A " + in.Account + "\n"
@@ -1531,7 +1897,12 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	host := fmt.Sprintf("%s:%d", loginName, 22)
 	submitJobRes, err := utils.SshSubmitJobCommand(host, in.UserId, scriptString, in.WorkingDirectory)
 	if err != nil {
-		return nil, status.New(codes.Unknown, strings.Join(submitJobRes, " ")).Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SBATCH_FAILED",
+		}
+		st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
 	jobIdString := submitJobRes[len(submitJobRes)-1]
 	jobId, _ := strconv.Atoi(jobIdString)
@@ -1539,21 +1910,28 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 }
 
 func main() {
+	var err error
+	dbConfig := utils.DatabaseConfig()
+	db, err = sql.Open("mysql", dbConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	// 监听本地8972端口
 	lis, err := net.Listen("tcp", ":8972")
 	if err != nil {
 		fmt.Printf("failed to listen: %v", err)
 		return
 	}
+
 	s := grpc.NewServer() // 创建gRPC服务器
 	pb.RegisterUserServiceServer(s, &serverUser{})
 	pb.RegisterAccountServiceServer(s, &serverAccount{})
 	pb.RegisterConfigServiceServer(s, &serverConfig{})
 	pb.RegisterJobServiceServer(s, &serverJob{})
-	// 启动服务
-	err = s.Serve(lis)
-	if err != nil {
-		fmt.Printf("failed to serve: %v", err)
-		return
+
+	if err = s.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
 	}
 }
