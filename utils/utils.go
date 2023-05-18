@@ -18,23 +18,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// type RichError struct {
-// 	reason    string
-// 	Message string
-// }
-
-// func (re *RichError) Error() string {
-// 	return re.Message
-// }
-
-// func (re *RichError) GRPCStatus() *status.Status {
-// 	return status.New(codes.NotFound, re.Message).WithDetails(&ErrorCode{Code: re.Code})
-// }
-
-// type ErrorCode struct {
-// 	Code string `json:"code"`
-// }
-
 func ExecuteShellCommand(command string) int {
 	var res int
 	cmd := exec.Command("bash", "-c", command)
@@ -73,7 +56,8 @@ func DatabaseConfig() string {
 }
 
 func GetPatitionInfo() ([]string, error) {
-	shellCmd := fmt.Sprintf("cat /etc/slurm/slurm.conf | grep -i PartitionName | grep -v '#' | awk '{print $1}' | awk -F'=' '{print $2}'| tr '\n' ','")
+	// shellCmd := fmt.Sprintf("cat /etc/slurm/slurm.conf | grep -i PartitionName | grep -v '#' | awk '{print $1}' | awk -F'=' '{print $2}'| tr '\n' ','")
+	shellCmd := "scontrol show partition| grep PartitionName=| awk -F'=' '{print $2}'| tr '\n' ','"
 	output, err := RunCommand(shellCmd)
 	if err != nil {
 		return nil, err
