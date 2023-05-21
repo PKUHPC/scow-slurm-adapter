@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	// "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestGetJobs(t *testing.T) {
@@ -21,14 +21,16 @@ func TestGetJobs(t *testing.T) {
 	client := pb.NewJobServiceClient(conn)
 
 	// Call the Add RPC with test data
+	fields := []string{"job_id", "state", "elapsed_seconds", "time_limit_minutes"}
 	user := []string{"test03", "test02"}
-	account := []string{"c_admin", "a_admin"}
-	state := []string{"CANCELLED", "PENDDING"}
+	// account := []string{"c_admin", "a_admin"}
+	account := []string{}
+	state := []string{"CANCELED", "COMPTE"}
 	req := &pb.GetJobsRequest{
-		Fields: []string{}, 
+		Fields: fields,
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10},
-		Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, 
-
+		Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state},
+		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{EndTime: &timestamppb.Timestamp{Seconds: 1682406485}}},
 	}
 	res, err := client.GetJobs(context.Background(), req)
 	if err != nil {

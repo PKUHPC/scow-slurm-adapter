@@ -1380,24 +1380,24 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.GetJobsResponse, error) {
 	var (
-		jobId             int
-		jobName           string
-		account           string
-		partition         string
-		idQos             int
-		state             int
-		cpusReq           int32
-		memReq            int64
-		nodeReq           int32
-		timeLimitMinutes  int64
-		idUser            int
-		submitTime        int64
-		stdoutPath        string
-		stderrPath        string
-		startTime         int64
-		timeSuspended     int64
-		gresUsed          string
-		elapsedSeconds    int64
+		jobId            int
+		jobName          string
+		account          string
+		partition        string
+		idQos            int
+		state            int
+		cpusReq          int32
+		memReq           int64
+		nodeReq          int32
+		timeLimitMinutes int64
+		idUser           int
+		submitTime       int64
+		stdoutPath       string
+		stderrPath       string
+		startTime        int64
+		timeSuspended    int64
+		gresUsed         string
+		// elapsedSeconds    int64
 		reason            string
 		nodeList          string
 		gpusAlloc         int32
@@ -1594,6 +1594,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
+				log.Println(1111)
 				for _, user := range in.Filter.Users {
 					uid, _ := utils.SearchUidNumberFromLdap(user)
 					uidList = append(uidList, uid)
@@ -1658,6 +1659,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table", clusterName)
 		}
 	}
+	// log.Println(jobSqlConfig)
+	// log.Println(params...)
 	rows, err := db.Query(jobSqlConfig, params...)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -1678,6 +1681,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
+		var elapsedSeconds int64
 		stateString = utils.ChangeState(state)
 		submitTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(submitTime, 0).Unix())}
 		startTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
@@ -1753,7 +1757,11 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 			nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
-			elapsedSeconds = endTime - startTime
+			log.Println(jobId, startTime, endTime)
+			if startTime != 0 && endTime != 0 {
+				elapsedSeconds = endTime - startTime
+			}
+			// elapsedSeconds = endTime - startTime
 			if output == "cons_tres" || output == "cons_res" {
 				if len(gpuIdList) == 0 {
 					gpusAlloc = 0
@@ -1867,7 +1875,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
 	}
-	log.Println(jobInfo)
+	// log.Println(jobInfo)
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }
 
