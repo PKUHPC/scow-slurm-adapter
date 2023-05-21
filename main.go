@@ -907,7 +907,6 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	log.Println(qosList)
 	for _, partition := range partitions {
 		var (
 			totalGpus uint32
@@ -988,7 +987,6 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		})
 	}
 	// 增加调度器的名字, 针对于特定的适配器做的接口
-	log.Println(parts)
 	return &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"}, nil
 }
 
@@ -1594,7 +1592,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
-				// log.Println(1111)
 				for _, user := range in.Filter.Users {
 					uid, _ := utils.SearchUidNumberFromLdap(user)
 					uidList = append(uidList, uid)
@@ -1659,8 +1656,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,partition,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table", clusterName)
 		}
 	}
-	// log.Println(jobSqlConfig)
-	// log.Println(params...)
 	rows, err := db.Query(jobSqlConfig, params...)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -1765,7 +1760,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 			nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
-			log.Println(jobId, startTime, endTime)
 			if startTime != 0 && endTime != 0 {
 				elapsedSeconds = endTime - startTime
 			}
@@ -1883,7 +1877,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
 	}
-	log.Println(jobInfo)
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }
 
