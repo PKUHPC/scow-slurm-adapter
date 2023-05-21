@@ -21,7 +21,8 @@ func TestGetJobs(t *testing.T) {
 	client := pb.NewJobServiceClient(conn)
 
 	// Call the Add RPC with test data
-	fields := []string{"job_id", "state", "elapsed_seconds", "time_limit_minutes"}
+	// fields := []string{"job_id", "state", "elapsed_seconds", "time_limit_minutes"}
+	fields := []string{}
 	user := []string{"test03", "test02"}
 	// account := []string{"c_admin", "a_admin"}
 	account := []string{}

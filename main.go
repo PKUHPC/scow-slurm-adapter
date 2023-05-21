@@ -1594,7 +1594,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
-				log.Println(1111)
+				// log.Println(1111)
 				for _, user := range in.Filter.Users {
 					uid, _ := utils.SearchUidNumberFromLdap(user)
 					uidList = append(uidList, uid)
@@ -1682,10 +1682,18 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			return nil, st.Err()
 		}
 		var elapsedSeconds int64
+		var startTimeTimestamp *timestamppb.Timestamp
+		var endTimeTimestamp *timestamppb.Timestamp
 		stateString = utils.ChangeState(state)
 		submitTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(submitTime, 0).Unix())}
-		startTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
-		endTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
+		if startTime != 0 {
+			startTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
+		}
+		if endTime != 0 {
+			endTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
+		}
+		// startTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
+		// endTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
 
 		// username 转换，需要从ldap中拿数据
 		userName, _ := utils.SearchUserUidFromLdap(idUser)
@@ -1875,7 +1883,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
 	}
-	// log.Println(jobInfo)
+	log.Println(jobInfo)
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }
 
