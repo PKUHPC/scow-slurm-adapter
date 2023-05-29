@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
 
 	"fmt"
 	"math"
@@ -51,14 +52,17 @@ func init() {
 // UserService
 func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccountRequest) (*pb.AddUserToAccountResponse, error) {
 	var (
-		acctName string
-		userName string
-		qosName  string
-		user     string
-		qosList  []string
+		acctName                string
+		userName                string
+		qosName                 string
+		user                    string
+		loginName               string
+		loginNodeStatusResponse bool = false
+		qosList                 []string
 	)
 
 	clusterName := configValue.MySQLConfig.ClusterName
+	loginNodes := configValue.LoginNodes
 
 	// 字符串拼接改成占位符防止注入
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
@@ -123,7 +127,52 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 
+	// deng
+	// 检测登录节点的存活状态
+	for _, v := range loginNodes {
+		loginNodeStatusResponse = utils.Ping(v)
+		if loginNodeStatusResponse {
+			loginName = v
+			break
+		}
+	}
+	if loginNodeStatusResponse == false {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "LOGIN_NODE_UNAVAILABLE",
+		}
+		st := status.New(codes.Unavailable, "The login nodes all dead.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
 	if err != nil {
+		// 还要判断一次
+		userAssocSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 1"
+		err = db.QueryRow(userAssocSqlConfig, in.UserId).Scan(&userName)
+		if err != nil {
+			// 先判断root有无公私钥
+			rootSshDir := "/root/.ssh"
+			if _, err := os.Stat(rootSshDir); os.IsNotExist(err) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "NOT_FOUND_KEY",
+				}
+				st := status.New(codes.Internal, "The system did not perform a password free operation.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			} else {
+				client := utils.NewSSHClient("root", loginName, "22")
+				// client.sftpClient
+				err := client.RemoteDirFileCreate(in.UserId)
+				if err != nil {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "FREE_PASSWORD_FAILED",
+					}
+					st := status.New(codes.Internal, "Password free operation failed.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
+			}
+		}
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, "normal")
@@ -163,7 +212,6 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		jobList  []string
 		acctList []string
 	)
-
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
@@ -1042,9 +1090,9 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	host := fmt.Sprintf("%s:%d", loginName, 22)
 	scancelJobCmd := fmt.Sprintf("scancel %d", in.JobId)
-	scancelJobRes, err := utils.SshExectueShellCmd(host, in.UserId, scancelJobCmd)
+	client := utils.NewSSHClient(in.UserId, loginName, "22")
+	scancelJobRes, err := client.Run(scancelJobCmd)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "CANCEL_JOB_FAILED",
@@ -1937,7 +1985,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		scriptString += "#SBATCH " + "--error=" + *in.Stderr + "\n"
 	}
 	if in.MemoryMb != nil {
-		scriptString += "#SBATCH " + "--mem=" + strconv.Itoa(int(*in.MemoryMb)) + "\n"
+		scriptString += "#SBATCH " + "--mem=" + strconv.Itoa(int(*in.MemoryMb)) + "MB" + "\n"
 	}
 	if in.GpuCount != 0 {
 		scriptString += "#SBATCH " + "--gres=gpu:" + strconv.Itoa(int(in.GpuCount)) + "\n"
@@ -1951,9 +1999,9 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 
 	scriptString += "\n"
 	scriptString += in.Script
-	// ssh执行提交任务
-	host := fmt.Sprintf("%s:%d", loginName, 22)
-	submitJobRes, err := utils.SshSubmitJobCommand(host, in.UserId, scriptString, in.WorkingDirectory)
+	client := utils.NewSSHClient(in.UserId, loginName, "22")
+	submitJobRes, err := client.RunSubmitJobCommand(scriptString, in.WorkingDirectory)
+
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SBATCH_FAILED",

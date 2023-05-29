@@ -31,12 +31,12 @@ type Config struct {
 }
 
 var (
-	DefaultConfigPath string
+	DefaultConfigPath string = "config/config.yaml"
 )
 
-func init() {
-	DefaultConfigPath = "../scow-slurm-adapter/config/config.yaml"
-}
+// func init() {
+// 	DefaultConfigPath = "config/config.yaml"
+// }
 
 func ParseConfig(configFilePath string) *Config {
 	confFile, err := ioutil.ReadFile(configFilePath)

@@ -36,8 +36,8 @@ func TestSubmitJob(t *testing.T) {
 		MemoryMb:         &memoryMb,
 		CoreCount:        1,
 		TimeLimitMinutes: &timeLimitMinutes,
-		Script:           "sleep 100",
-		WorkingDirectory: "dffff",
+		Script:           "hostname\n ls",
+		WorkingDirectory: "dffffeeee",
 		Stdout:           &stdout,
 		Stderr:           &stderr,
 	}

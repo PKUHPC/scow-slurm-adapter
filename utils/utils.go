@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 	"strconv"
 
 	"os"
@@ -15,8 +16,19 @@ import (
 	"syscall"
 
 	ldap "github.com/go-ldap/ldap/v3"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+type Cli struct {
+	user       string
+	ip         string
+	port       string
+	sshClient  *ssh.Client
+	sftpClient *sftp.Client
+}
 
 func ExecuteShellCommand(command string) int {
 	var res int
@@ -220,8 +232,15 @@ func GetResInfoNumFromTresInfo(tresInfo string, resId int) int {
 	return resInfoNum
 }
 
-func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, error) {
-	var errbuf bytes.Buffer
+func NewSSHClient(user, ip, port string) Cli {
+	return Cli{
+		user: user,
+		ip:   ip,
+		port: port,
+	}
+}
+
+func (c *Cli) getConfigKey() (*ssh.ClientConfig, error) {
 	homePath, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -234,21 +253,118 @@ func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, err
 	if err != nil {
 		return nil, err
 	}
-	client, err := ssh.Dial("tcp", hostName, &ssh.ClientConfig{
-		User:            user,
+	config := &ssh.ClientConfig{
+		User:            c.user,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	})
-	if err != nil {
-		return nil, err
 	}
+	return config, nil
+}
+
+func (c *Cli) Connect() error {
+	config, err := c.getConfigKey()
+	if err != nil {
+		return err
+	}
+	client, err := ssh.Dial("tcp", c.ip+":"+c.port, config)
+	if err != nil {
+		return err
+	}
+	sftp, err := sftp.NewClient(client)
+	if err != nil {
+		return err
+	}
+
+	c.sshClient = client
+	c.sftpClient = sftp
+	return nil
+}
+
+func (c Cli) RemoteDirFileCreate(user string) error {
+	if c.sshClient == nil {
+		if err := c.Connect(); err != nil {
+			return err
+		}
+	}
+	session, err := c.sshClient.NewSession()
+	defer session.Close()
+	if err != nil {
+		return err
+	}
+	homeDir, _ := SearchHomeDirFromLdap(user)
+	// 判断家目录在不在
+	_, err = c.sftpClient.Stat(homeDir)
+	if err != nil {
+		return err
+	}
+	gid, _ := SearchGidNumberFromLdap(user)
+	uid, _ := SearchUidNumberFromLdap(user)
+	dirPath := filepath.Join(homeDir, ".ssh")
+	_, err = c.sftpClient.Stat(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.sftpClient.MkdirAll(dirPath)
+			c.sftpClient.Chmod(dirPath, 0700)
+			c.sftpClient.Chown(dirPath, uid, gid)
+			// 创建文件
+			file, err := os.Open("/root/.ssh/id_rsa.pub")
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			ftpFile, err := c.sftpClient.Create(path.Join(dirPath, "authorized_keys"))
+			if err != nil {
+				return err
+			}
+			defer ftpFile.Close()
+			fileByte, err := ioutil.ReadAll(file)
+			if err != nil {
+				return err
+			}
+			ftpFile.Write(fileByte)
+			c.sftpClient.Chmod(path.Join(dirPath, "authorized_keys"), 0600)
+			c.sftpClient.Chown(path.Join(dirPath, "authorized_keys"), uid, gid)
+			return nil
+		} else {
+			return status.New(codes.Internal, "Internal error.").Err()
+		}
+	}
+	c.sftpClient.Chmod(dirPath, 0700)
+	c.sftpClient.Chown(dirPath, uid, gid)
+	// 创建文件
+	file, err := os.Open("/root/.ssh/id_rsa.pub")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	ftpFile, err := c.sftpClient.Create(path.Join(dirPath, "authorized_keys"))
+	if err != nil {
+		return err
+	}
+	defer ftpFile.Close()
+	fileByte, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	ftpFile.Write(fileByte)
+	c.sftpClient.Chmod(path.Join(dirPath, "authorized_keys"), 0600)
+	c.sftpClient.Chown(path.Join(dirPath, "authorized_keys"), uid, gid)
+	return nil
+}
+
+func (c Cli) Run(cmd string) ([]string, error) {
+	var errbuf bytes.Buffer
 	// 建立新会话
-	session, err := client.NewSession()
+	if c.sshClient == nil {
+		if err := c.Connect(); err != nil {
+			return []string{}, err
+		}
+	}
+	session, err := c.sshClient.NewSession()
 	defer session.Close()
 	if err != nil {
 		return nil, err
 	}
-
 	// Set the output to a bytes.Buffer
 	session.Stderr = &errbuf
 	// 会话输入关联到系统标准输入设备
@@ -262,41 +378,26 @@ func SshExectueShellCmd(hostName string, user string, cmd string) ([]string, err
 	return outputList, nil
 }
 
-func SshSubmitJobCommand(hostName string, user string, script string, workingDirectory string) ([]string, error) {
+func (c Cli) RunSubmitJobCommand(script string, workingDirectory string) ([]string, error) {
 	var errbuf bytes.Buffer
-	homePath, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	key, err := ioutil.ReadFile(path.Join(homePath, ".ssh", "id_rsa"))
-	if err != nil {
-		return nil, err
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, err
-	}
-	client, err := ssh.Dial("tcp", hostName, &ssh.ClientConfig{
-		User:            user,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	})
-	if err != nil {
-		return nil, err
-	}
 	// 建立新会话
-	session, err := client.NewSession()
+	if c.sshClient == nil {
+		if err := c.Connect(); err != nil {
+			return []string{}, err
+		}
+	}
+	session, err := c.sshClient.NewSession()
 	defer session.Close()
 	if err != nil {
 		return nil, err
 	}
-
 	// Set the output to a bytes.Buffer
 	session.Stderr = &errbuf
-	createDirAndSubmitJob := fmt.Sprintf("mkdir -p %s; sbatch", workingDirectory)
+	c.sftpClient.MkdirAll(workingDirectory)
+	SubmitJobCmd := fmt.Sprintf("sbatch")
 	// 会话输入关联到系统标准输入设备
 	session.Stdin = strings.NewReader(script)
-	result, err := session.Output(createDirAndSubmitJob)
+	result, err := session.Output(SubmitJobCmd)
 	// stderr as a string by calling the Buffer.String() method
 	stderr := errbuf.String()
 	if err != nil {
@@ -304,6 +405,95 @@ func SshSubmitJobCommand(hostName string, user string, script string, workingDir
 	}
 	outputList := strings.Split(strings.TrimSpace(string(result)), " ")
 	return outputList, nil
+}
+
+func SearchHomeDirFromLdap(user string) (string, error) {
+	config := config.ParseConfig(config.DefaultConfigPath)
+	ip := config.LDAPConfig.IP
+	port := config.LDAPConfig.Port
+	baseDN := config.LDAPConfig.BaseDN
+	bindDN := config.LDAPConfig.BindDN
+	password := config.LDAPConfig.Password
+
+	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
+	l, err := ldap.Dial("tcp", ldapUrl)
+	if err != nil {
+		fmt.Printf("Failed to connect to LDAP server: %s", err.Error())
+		return "", err
+	}
+	defer l.Close()
+	// 绑定到 LDAP 服务器，使用管理员账户进行查询
+	err = l.Bind(fmt.Sprintf("%v", bindDN), fmt.Sprintf("%v", password))
+	if err != nil {
+		fmt.Printf("Failed to bind to LDAP server: %s", err.Error())
+		return "", err
+	}
+	// 查询用户的 UID
+	searchRequest := ldap.NewSearchRequest(
+		fmt.Sprintf("%v", baseDN),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=posixAccount)(uid=%s))", user),
+		[]string{"homeDirectory"},
+		nil,
+	)
+	searchResult, err := l.Search(searchRequest)
+	if err != nil {
+		fmt.Printf("Failed to search LDAP server: %s", err.Error())
+		return "", err
+	}
+
+	// 打印查询结果
+	if len(searchResult.Entries) == 0 {
+		return "", errors.New("User not found.")
+	} else {
+		homeDir := searchResult.Entries[0].GetAttributeValue("homeDirectory")
+		return homeDir, nil
+	}
+}
+
+func SearchGidNumberFromLdap(user string) (int, error) {
+	config := config.ParseConfig(config.DefaultConfigPath)
+	ip := config.LDAPConfig.IP
+	port := config.LDAPConfig.Port
+	baseDN := config.LDAPConfig.BaseDN
+	bindDN := config.LDAPConfig.BindDN
+	password := config.LDAPConfig.Password
+
+	ldapUrl := fmt.Sprintf("%s:%d", ip, port)
+	l, err := ldap.Dial("tcp", ldapUrl)
+	if err != nil {
+		fmt.Printf("Failed to connect to LDAP server: %s", err.Error())
+		return 0, err
+	}
+	defer l.Close()
+	// 绑定到 LDAP 服务器，使用管理员账户进行查询
+	err = l.Bind(fmt.Sprintf("%v", bindDN), fmt.Sprintf("%v", password))
+	if err != nil {
+		fmt.Printf("Failed to bind to LDAP server: %s", err.Error())
+		return 0, err
+	}
+	// 查询用户的 UID
+	searchRequest := ldap.NewSearchRequest(
+		fmt.Sprintf("%v", baseDN),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		fmt.Sprintf("(&(objectClass=posixAccount)(uid=%s))", user),
+		[]string{"gidNumber"},
+		nil,
+	)
+	searchResult, err := l.Search(searchRequest)
+	if err != nil {
+		fmt.Printf("Failed to search LDAP server: %s", err.Error())
+		return 0, err
+	}
+
+	// 打印查询结果
+	if len(searchResult.Entries) == 0 {
+		return 0, errors.New("User not found.")
+	} else {
+		uid := searchResult.Entries[0].GetAttributeValue("gidNumber")
+		myIntUid, _ := strconv.Atoi(uid)
+		return myIntUid, nil
+	}
 }
 
 func SearchUidNumberFromLdap(user string) (int, error) {
@@ -395,7 +585,6 @@ func SearchUserUidFromLdap(uid int) (string, error) {
 		return "", errors.New("User not found.")
 	} else {
 		uid := searchResult.Entries[0].GetAttributeValue("uid")
-		// myIntUid, _ := strconv.Atoi(uid)
 		return uid, nil
 	}
 }

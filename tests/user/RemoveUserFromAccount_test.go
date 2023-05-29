@@ -21,8 +21,8 @@ func TestRemoveUserFromAccount(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.RemoveUserFromAccountRequest{
-		UserId:      "test07",
-		AccountName: "w_admin",
+		UserId:      "test05",
+		AccountName: "z1",
 	}
 	_, err = client.RemoveUserFromAccount(context.Background(), req)
 	if err != nil {
