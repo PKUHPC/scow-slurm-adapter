@@ -917,9 +917,15 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 
 // config service
 func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterConfigRequest) (*pb.GetClusterConfigResponse, error) {
-	var parts []*pb.Partition // 定义返回的类型
-	var qosName string
-	var qosList []string
+	var (
+		parts           []*pb.Partition // 定义返回的类型
+		qosName         string
+		qosList         []string
+		totalCpuInt     int
+		totalMemInt     int
+		totalNodeNumInt int
+	)
+
 	partitions, _ := utils.GetPatitionInfo()
 
 	// 查系统中的所有qos
@@ -961,22 +967,53 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			comment   string
 			qos       []string
 		)
+
 		getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
-		output, _ := utils.RunCommand(getPartitionInfoCmd)
-		configArray := strings.Split(output, ",")
-		totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
-		totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}' | awk -F'M' '{print $1}'", configArray[1])
-		totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
+		// 这个地方先判断一下
+		output, err := utils.RunCommand(getPartitionInfoCmd)
+		if err == nil {
+			configArray := strings.Split(output, ",")
+			totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
+			totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}' | awk -F'M' '{print $1}'", configArray[1])
+			totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
 
-		totalCpus, _ := utils.RunCommand(totalCpusCmd)
-		totalMems, _ := utils.RunCommand(totalMemsCmd)
-		totalNodes, _ := utils.RunCommand(totalNodesCmd)
+			totalCpus, _ := utils.RunCommand(totalCpusCmd)
+			totalMems, _ := utils.RunCommand(totalMemsCmd)
+			totalNodes, _ := utils.RunCommand(totalNodesCmd)
 
-		// 将字符串转换为int
-		totalCpuInt, _ := strconv.Atoi(totalCpus)
-		totalMemInt, _ := strconv.Atoi(totalMems)
-		totalNodeNumInt, _ := strconv.Atoi(totalNodes)
+			// 将字符串转换为int
+			totalCpuInt, _ = strconv.Atoi(totalCpus)
+			totalMemInt, _ = strconv.Atoi(totalMems)
+			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
+		} else {
+			// 获取总cpu、总内存、总节点数
+			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
+			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			totalCpuInt, _ = strconv.Atoi(totalCpus)
+			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
+			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 
+			// 取节点名，默认取第一个元素，在判断有没有[特殊符合
+			getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
+			nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+			nodeArray := strings.Split(nodeOutput, ",")
+			res := strings.Contains(nodeArray[0], "[")
+			if res {
+				getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
+				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
+				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
+				memOutput, _ := utils.RunCommand(getMemCmd)
+				nodeMem, _ := strconv.Atoi(memOutput)
+				totalMemInt = nodeMem * totalNodeNumInt
+			} else {
+				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
+				memOutput, _ := utils.RunCommand(getMemCmd)
+				nodeMem, _ := strconv.Atoi(memOutput)
+				totalMemInt = nodeMem * totalNodeNumInt
+			}
+		}
 		// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 		getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
 		nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
