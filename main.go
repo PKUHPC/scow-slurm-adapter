@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"os"
 
 	"fmt"
 	"math"
@@ -52,17 +51,14 @@ func init() {
 // UserService
 func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccountRequest) (*pb.AddUserToAccountResponse, error) {
 	var (
-		acctName                string
-		userName                string
-		qosName                 string
-		user                    string
-		loginName               string
-		loginNodeStatusResponse bool = false
-		qosList                 []string
+		acctName string
+		userName string
+		qosName  string
+		user     string
+		qosList  []string
 	)
 
 	clusterName := configValue.MySQLConfig.ClusterName
-	loginNodes := configValue.LoginNodes
 
 	// 字符串拼接改成占位符防止注入
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
@@ -127,52 +123,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 
-	// deng
-	// 检测登录节点的存活状态
-	for _, v := range loginNodes {
-		loginNodeStatusResponse = utils.Ping(v)
-		if loginNodeStatusResponse {
-			loginName = v
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
-		errInfo := &errdetails.ErrorInfo{
-			Reason: "LOGIN_NODE_UNAVAILABLE",
-		}
-		st := status.New(codes.Unavailable, "The login nodes all dead.")
-		st, _ = st.WithDetails(errInfo)
-		return nil, st.Err()
-	}
-
 	if err != nil {
-		// 还要判断一次
-		userAssocSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 1"
-		err = db.QueryRow(userAssocSqlConfig, in.UserId).Scan(&userName)
-		if err != nil {
-			// 先判断root有无公私钥
-			rootSshDir := "/root/.ssh"
-			if _, err := os.Stat(rootSshDir); os.IsNotExist(err) {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "NOT_FOUND_KEY",
-				}
-				st := status.New(codes.Internal, "The system did not perform a password free operation.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			} else {
-				client := utils.NewSSHClient("root", loginName, "22")
-				// client.sftpClient
-				err := client.RemoteDirFileCreate(in.UserId)
-				if err != nil {
-					errInfo := &errdetails.ErrorInfo{
-						Reason: "FREE_PASSWORD_FAILED",
-					}
-					st := status.New(codes.Internal, "Password free operation failed.")
-					st, _ = st.WithDetails(errInfo)
-					return nil, st.Err()
-				}
-			}
-		}
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, "normal")
@@ -1470,7 +1421,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		idQos            int
 		state            int
 		cpusReq          int32
-		memReq           int64
+		memReq           uint64
 		nodeReq          int32
 		timeLimitMinutes int64
 		idUser           int
@@ -1536,7 +1487,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1547,7 +1498,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -1558,7 +1509,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1746,7 +1697,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1757,7 +1708,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -1860,6 +1811,9 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 		}
 
+		if memReq == 9223372036854777728 {
+			memReq = 0
+		}
 		if len(fields) == 0 {
 			jobInfo = append(jobInfo, &pb.JobInfo{
 				JobId:            uint32(jobId),
@@ -1870,7 +1824,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				Qos:              qosName,
 				State:            stateString,
 				CpusReq:          cpusReq,
-				MemReqMb:         memReq,
+				MemReqMb:         int64(memReq),
 				TimeLimitMinutes: timeLimitMinutes,
 				SubmitTime:       submitTimeTimestamp,
 				WorkingDirectory: workingDirectory,
@@ -1907,7 +1861,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				case "cpus_req":
 					subJobInfo.CpusReq = cpusReq
 				case "mem_req_mb":
-					subJobInfo.MemReqMb = memReq
+					subJobInfo.MemReqMb = int64(memReq)
 				case "nodes_req":
 					subJobInfo.NodesReq = nodeReq
 				case "time_limit_minutes":
@@ -1948,7 +1902,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -2040,16 +1994,36 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	submitJobRes, err := client.RunSubmitJobCommand(scriptString, in.WorkingDirectory)
 
 	if err != nil {
-		errInfo := &errdetails.ErrorInfo{
-			Reason: "SBATCH_FAILED",
+		if strings.Join(submitJobRes, " ") == "login failed" {
+			client := utils.NewSSHClient("root", loginName, "22")
+			// client.sftpClient
+			client.RemoteDirFileCreate(in.UserId)
+			clientNew := utils.NewSSHClient(in.UserId, loginName, "22")
+			submitJobRes, err := clientNew.RunSubmitJobCommand(scriptString, in.WorkingDirectory)
+			if err != nil {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "SBATCH_FAILED",
+				}
+				st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+			jobIdString := submitJobRes[len(submitJobRes)-1]
+			jobId, _ := strconv.Atoi(jobIdString)
+			return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
+		} else {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SBATCH_FAILED",
+			}
+			st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
-		st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
-		st, _ = st.WithDetails(errInfo)
-		return nil, st.Err()
+	} else {
+		jobIdString := submitJobRes[len(submitJobRes)-1]
+		jobId, _ := strconv.Atoi(jobIdString)
+		return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
 	}
-	jobIdString := submitJobRes[len(submitJobRes)-1]
-	jobId, _ := strconv.Atoi(jobIdString)
-	return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
 }
 
 func main() {

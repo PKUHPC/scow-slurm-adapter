@@ -26,7 +26,7 @@ func TestSubmitJob(t *testing.T) {
 	stdout := "slurm-%j.out"
 	stderr := "slurm-%j.out"
 	req := &pb.SubmitJobRequest{
-		UserId:           "test03",
+		UserId:           "test15",
 		JobName:          "test",
 		Account:          "a_admin",
 		Partition:        "compute",
@@ -36,7 +36,7 @@ func TestSubmitJob(t *testing.T) {
 		MemoryMb:         &memoryMb,
 		CoreCount:        1,
 		TimeLimitMinutes: &timeLimitMinutes,
-		Script:           "hostname\n ls",
+		Script:           "sleep 100",
 		WorkingDirectory: "dffffeeee",
 		Stdout:           &stdout,
 		Stderr:           &stderr,

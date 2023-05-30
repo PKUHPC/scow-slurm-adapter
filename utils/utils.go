@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"strconv"
 
@@ -383,7 +384,8 @@ func (c Cli) RunSubmitJobCommand(script string, workingDirectory string) ([]stri
 	// 建立新会话
 	if c.sshClient == nil {
 		if err := c.Connect(); err != nil {
-			return []string{}, err
+			log.Println(22222222)
+			return []string{"login failed"}, err
 		}
 	}
 	session, err := c.sshClient.NewSession()
