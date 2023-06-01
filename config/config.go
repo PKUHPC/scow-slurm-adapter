@@ -16,28 +16,25 @@ type MySQLConfig struct {
 	ClusterName string `yaml:"clustername"`
 }
 
-type LDAPConfig struct {
-	IP       string `yaml:"ip"`
-	Port     int    `yaml:"port"`
-	BaseDN   string `yaml:"basedn"`
-	BindDN   string `yaml:"binddn"`
-	Password string `yaml:"password"`
+type Service struct {
+	Port int `yaml:"port"`
+}
+
+type Slurm struct {
+	DefaultQOS string `yaml:"defaultqos"`
 }
 
 type Config struct {
 	MySQLConfig MySQLConfig `yaml:"mysql"`
-	LDAPConfig  LDAPConfig  `yaml:"ldap"`
-	LoginNodes  []string    `yaml:"loginNode"`
+	Service     Service     `yaml:"service"`
+	Slurm       Slurm       `yaml:"slurm"`
 }
 
 var (
 	DefaultConfigPath string = "config/config.yaml"
 )
 
-// func init() {
-// 	DefaultConfigPath = "config/config.yaml"
-// }
-
+// 解析配置文件
 func ParseConfig(configFilePath string) *Config {
 	confFile, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
@@ -49,6 +46,5 @@ func ParseConfig(configFilePath string) *Config {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	return config
 }

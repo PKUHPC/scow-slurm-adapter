@@ -7,14 +7,10 @@ mysql:
   password: 81SLURM@@rabGTjN7
   clustername: cluster
 
-# ldap相关配置
-ldap:
-  ip: 127.0.0.1
-  port: 389
-  basedn: ou=People,ou=hpc,o=pku
-  binddn: cn=Manager,ou=hpc,o=pku
-  password: admin
+# 服务端口设置
+service:
+  port: 8999
 
-# 登录节点列表
-loginNode:
-  - login01
+# slurm 默认Qos设置
+slurm:
+  defaultqos: normal

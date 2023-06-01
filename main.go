@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log"
+	"os"
 
 	"fmt"
 	"math"
@@ -17,6 +19,7 @@ import (
 	pb "scow-slurm-adapter/gen/go"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/sirupsen/logrus"
 	"github.com/wxnacy/wgo/arrays"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -25,8 +28,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var configValue *config.Config
-var db *sql.DB
+var (
+	configValue *config.Config
+	db          *sql.DB
+	logExample  *logrus.Logger
+)
 
 type serverUser struct {
 	pb.UnimplementedUserServiceServer
@@ -58,9 +64,26 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		qosList  []string
 	)
 
-	clusterName := configValue.MySQLConfig.ClusterName
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
 
-	// 字符串拼接改成占位符防止注入
+	// 获取机器名和默认Qos
+	clusterName := configValue.MySQLConfig.ClusterName
+	defaultQos := configValue.Slurm.DefaultQOS
+
+	// 检查用户名、账户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	// 检查账号是否存在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -72,16 +95,6 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		return nil, st.Err()
 	}
 
-	_, err = utils.SearchUidNumberFromLdap(in.UserId)
-	if err != nil {
-		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_NOT_FOUND",
-		}
-		st := status.New(codes.NotFound, "The user does not exists.")
-		st, _ = st.WithDetails(errInfo)
-		return nil, st.Err()
-	}
-
 	// 查询系统中的base Qos
 	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 	rows, err := db.Query(qosSqlConfig)
@@ -89,7 +102,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -100,7 +113,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -111,34 +124,36 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
 
-	baseQos := strings.Join(qosList, ",") // 系统中获取的baseQos的值
+	baseQos := strings.Join(qosList, ",")
 	// 查询用户是否在系统中
 	partitions, _ := utils.GetPatitionInfo()
 
+	// 检查用户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 
 	if err != nil {
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
-			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, "normal")
+			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
 		return &pb.AddUserToAccountResponse{}, nil
 	}
+	// 检查账户和用户之间是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 
 	if err != nil {
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
-			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, "normal")
+			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
@@ -163,8 +178,24 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		jobList  []string
 		acctList []string
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 获取集群名
 	clusterName := configValue.MySQLConfig.ClusterName
 
+	// 检查账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	// 检查账号名是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -175,7 +206,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// ldap中不存在，slurm中的user中肯定不存在
+	// 检查用户名是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
@@ -186,7 +217,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 检查账户和用户之间是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
@@ -198,14 +229,14 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		return nil, st.Err()
 	}
 
-	// 关联关系存在的情况下
+	// 查询除当前账户外的关联账户信息
 	assocAcctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0 AND acct != ?", clusterName)
 	rows, err := db.Query(assocAcctSqlConfig, in.UserId, in.AccountName)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -216,7 +247,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -227,12 +258,13 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
 
-	uid, err := utils.SearchUidNumberFromLdap(in.UserId)
+	// 查询用户uid
+	uid, _, err := utils.GetUserUidGid(in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
@@ -241,14 +273,14 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 检查用户是否有未结束的作业
 	jobSqlConfig := fmt.Sprintf("SELECT job_name FROM %s_job_table WHERE id_user = ? AND account = ? AND state IN (0, 1, 2)", clusterName)
 	jobRows, err := db.Query(jobSqlConfig, uid, in.AccountName)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -259,7 +291,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -270,7 +302,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -321,9 +353,23 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		userName string
 		user     string
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+
+	// 检查账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	clusterName := configValue.MySQLConfig.ClusterName
-
+	// 检查账户是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -334,7 +380,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// ldap中不存在的话在slurm的user表中肯定也不存在
+	// 检查用户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
@@ -345,6 +391,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 检查账户与用户是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 
@@ -377,9 +424,22 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		user          string
 		maxSubmitJobs int
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	clusterName := configValue.MySQLConfig.ClusterName
-
+	// 检查账户是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -390,6 +450,7 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	//  检查用户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
@@ -400,6 +461,7 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 检查账户与用户是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
@@ -437,9 +499,22 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		user          string
 		maxSubmitJobs int
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	clusterName := configValue.MySQLConfig.ClusterName
-
+	// 判断账户是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -450,7 +525,7 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 判断用户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
@@ -461,6 +536,7 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 检查账户与用户在slurm中是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 	if err != nil {
@@ -471,6 +547,7 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 查询max_submit_jobs的值,通过max_submit_jobs来判断用户是否被封锁
 	maxSubmitJobSqlConfig := fmt.Sprintf("SELECT DISTINCT max_submit_jobs FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(maxSubmitJobSqlConfig, in.UserId, in.AccountName).Scan(&maxSubmitJobs)
 	if err != nil {
@@ -486,10 +563,22 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		assocAcct string
 		acctList  []string
 	)
-
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查用户名中是否包含大写字母
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 获取集群名
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	// 判断用户是否存在
+	// 判断用户在slurm中是否存在
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
@@ -500,14 +589,14 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// 查询和用户相关的账户信息
+	// 查询用户相关联的所有账户信息
 	assocSqlConfig := fmt.Sprintf("SELECT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0", clusterName)
 	rows, err := db.Query(assocSqlConfig, in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -518,7 +607,7 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -529,7 +618,7 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -542,19 +631,24 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		qosName  string
 		qosList  []string
 	)
-
-	_, err := utils.SearchUidNumberFromLdap(in.OwnerUserId)
-	if err != nil {
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	resultUser := utils.ContainsUppercase(in.OwnerUserId)
+	if resultAcct || resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_NOT_FOUND",
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 获取系统中默认的Qos信息
+	defaultQos := configValue.Slurm.DefaultQOS
+	// 检查账户是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
-	err = db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
 		partitions, _ := utils.GetPatitionInfo() // 获取系统中计算分区信息
 		// 获取系统中Qos
@@ -564,7 +658,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -575,7 +669,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 				errInfo := &errdetails.ErrorInfo{
 					Reason: "SQL_QUERY_FAILED",
 				}
-				st := status.New(codes.Internal, "Sql query failed.")
+				st := status.New(codes.Internal, err.Error())
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
@@ -587,7 +681,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -596,7 +690,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		utils.ExecuteShellCommand(createAccountCmd)
 		for _, p := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, p, in.AccountName)
-			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, "normal")
+			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, defaultQos)
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
@@ -616,9 +710,21 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		assocAcctName string
 		acctList      []string
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查账户名中是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	if resultAcct {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	clusterName := configValue.MySQLConfig.ClusterName
-
+	// 检查账户是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -629,7 +735,9 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 获取系统中计算分区信息
 	partitions, _ := utils.GetPatitionInfo()
+	// 获取计算分区AllowAccounts的值
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
 	output, _ := utils.RunCommand(getAllowAcctCmd)
 	if output == "ALL" {
@@ -639,7 +747,7 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -650,7 +758,7 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 				errInfo := &errdetails.ErrorInfo{
 					Reason: "SQL_QUERY_FAILED",
 				}
-				st := status.New(codes.Internal, "Sql query failed.")
+				st := status.New(codes.Internal, err.Error())
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
@@ -661,7 +769,7 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -674,17 +782,17 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 	}
 	// output的值包含了系统中所有的分区信息
 	AllowAcctList := strings.Split(output, ",")
+	// 判断账户名是否在AllowAcctList中
 	index := arrays.ContainsString(AllowAcctList, in.AccountName)
 	if index == -1 {
 		return &pb.BlockAccountResponse{}, nil
 	}
-	// 账号存在
-	updateAllowAcct := utils.DeleteSlice2(AllowAcctList, in.AccountName)
+	// 账户存在AllowAcctList中，则删除账户后更新计算分区AllowAccounts
+	updateAllowAcct := utils.DeleteSlice(AllowAcctList, in.AccountName)
 	for _, p := range partitions {
 		updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(updateAllowAcct, ","))
 		utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
 	}
-	// updateSlurmConfigFile := fmt.Sprintf("sed -i 's/\\(AllowAccounts=\\).*/\\1%s/'   /etc/slurm/slurm.conf", strings.Join(updateAllowAcct, ","))
 	return &pb.BlockAccountResponse{}, nil
 }
 
@@ -692,6 +800,19 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 	var (
 		acctName string
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查用户名中是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	if resultAcct {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 检查账户名是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -702,6 +823,7 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 获取系统中计算分区信息
 	partitions, _ := utils.GetPatitionInfo()
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
 	output, _ := utils.RunCommand(getAllowAcctCmd)
@@ -730,16 +852,19 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		acctList      []string
 		acctInfo      []*pb.ClusterAccountInfo
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 获取集群名
 	clusterName := configValue.MySQLConfig.ClusterName
 
-	// 多行数据的搜索
+	// 获取系统中所有账户信息
 	acctSqlConfig := fmt.Sprintf("SELECT name FROM acct_table WHERE deleted = 0")
 	rows, err := db.Query(acctSqlConfig)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -750,7 +875,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -761,7 +886,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -771,6 +896,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
 	output, _ := utils.RunCommand(getAllowAcctCmd)
 
+	// 获取和每个账户关联的用户的信息
 	for _, v := range acctList {
 		var userInfo []*pb.ClusterAccountInfo_UserInAccount
 		assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user, max_submit_jobs FROM %s_assoc_table WHERE deleted = 0 AND acct = ? AND user != ''", clusterName)
@@ -779,7 +905,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -807,7 +933,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -842,6 +968,19 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	var (
 		acctName string
 	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查用户名中是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.AccountName)
+	if resultAcct {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 检查账户名是否在slurm中
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
@@ -852,7 +991,9 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// 获取系统中计算分区信息
 	partitions, _ := utils.GetPatitionInfo()
+	// 获取系统中分区AllowAccounts信息
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
 	output, _ := utils.RunCommand(getAllowAcctCmd)
 	if output == "ALL" {
@@ -876,9 +1017,10 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		totalMemInt     int
 		totalNodeNumInt int
 	)
-
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 获取系统计算分区信息
 	partitions, _ := utils.GetPatitionInfo()
-
 	// 查系统中的所有qos
 	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 	rows, err := db.Query(qosSqlConfig)
@@ -886,7 +1028,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -897,7 +1039,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -908,7 +1050,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -920,8 +1062,8 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		)
 
 		getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
-		// 这个地方先判断一下
 		output, err := utils.RunCommand(getPartitionInfoCmd)
+		// 不同slurm版本的问题
 		if err == nil {
 			configArray := strings.Split(output, ",")
 			totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
@@ -1028,16 +1170,23 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 
 // job service
 func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
-	// 取消作业在登录节点上执行
 	var (
-		userName                string
-		idJob                   int
-		loginName               string
-		loginNodeStatusResponse bool = false
+		userName string
+		idJob    int
 	)
-
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 检查用户名中是否包含大写字母
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	clusterName := configValue.MySQLConfig.ClusterName
-	loginNodes := configValue.LoginNodes
 
 	// 判断用户是否存在
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
@@ -1050,7 +1199,6 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// 用户存在的情况去查作业的情况
 	jobSqlConfig := fmt.Sprintf("SELECT id_job FROM %s_job_table WHERE id_job = ? AND state IN (0, 1, 2)", clusterName)
 	err = db.QueryRow(jobSqlConfig, in.JobId).Scan(&idJob)
 	if err != nil {
@@ -1062,30 +1210,13 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// 检测登录节点的存活状态
-	for _, v := range loginNodes {
-		loginNodeStatusResponse = utils.Ping(v)
-		if loginNodeStatusResponse {
-			loginName = v
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
-		errInfo := &errdetails.ErrorInfo{
-			Reason: "LOGIN_NODE_UNAVAILABLE",
-		}
-		st := status.New(codes.Unavailable, "The login nodes all dead.")
-		st, _ = st.WithDetails(errInfo)
-		return nil, st.Err()
-	}
-	scancelJobCmd := fmt.Sprintf("scancel %d", in.JobId)
-	client := utils.NewSSHClient(in.UserId, loginName, "22")
-	scancelJobRes, err := client.Run(scancelJobCmd)
+	// 取消作业
+	response, err := utils.LocalCancelJob(in.UserId, int(in.JobId))
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "CANCEL_JOB_FAILED",
 		}
-		st := status.New(codes.Unknown, strings.Join(scancelJobRes, " "))
+		st := status.New(codes.Unknown, response)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1093,7 +1224,9 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 }
 
 func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLimitRequest) (*pb.QueryJobTimeLimitResponse, error) {
-	var timeLimit uint64
+	var (
+		timeLimit uint64
+	)
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 通过jobId来查找作业信息
@@ -1111,7 +1244,11 @@ func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 }
 
 func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTimeLimitRequest) (*pb.ChangeJobTimeLimitResponse, error) {
-	var idJob int
+	var (
+		idJob int
+	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
@@ -1177,8 +1314,11 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	)
 	var fields []string = in.Fields
 
-	clusterName := configValue.MySQLConfig.ClusterName
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
 
+	clusterName := configValue.MySQLConfig.ClusterName
+	// 根据jobid查询作业详细信息
 	jobSqlConfig := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, partition, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_job = ?", clusterName)
 	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 	if err != nil {
@@ -1190,7 +1330,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		return nil, st.Err()
 	}
 
-	// cputresId、memTresId、nodeTresId
+	// 查询cputresId、memTresId、nodeTresId值
 	cpuTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'cpu'"
 	memTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'mem'"
 	nodeTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'node'"
@@ -1204,8 +1344,9 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	endTimeTimestamp := &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
 
 	// username 转换，需要从ldap中拿数据
-	userName, _ := utils.SearchUserUidFromLdap(idUser)
+	userName, _ := utils.GetUserNameByUid(idUser)
 
+	// 查询qos的名字
 	qosSqlConfig := "SELECT name FROM qos_table WHERE id = ?"
 	db.QueryRow(qosSqlConfig, idQos).Scan(&qosName)
 
@@ -1213,13 +1354,14 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
 	output, _ := utils.RunCommand(slurmConfigCmd)
 
+	// 查询gpu对应的id信息
 	gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
 	rows, err := db.Query(gpuSqlConfig)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1230,7 +1372,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "SQL_QUERY_FAILED",
 			}
-			st := status.New(codes.Internal, "Sql query failed.")
+			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -1241,16 +1383,17 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "SQL_QUERY_FAILED",
 		}
-		st := status.New(codes.Internal, "Sql query failed.")
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
 
+	// 状态为排队和挂起的作业信息
 	if state == 0 || state == 2 {
 		getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
 		output, _ := utils.RunCommand(getReasonCmd)
 		reason = output
-		// get stdout stderr path
+		// 获取 stdout stderr 路径信息
 		getStdoutPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdOut | awk -F'=' '{print $2}'", jobId)
 		getStderrPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdErr | awk -F'=' '{print $2}'", jobId)
 		StdoutPath, _ := utils.RunCommand(getStdoutPathCmd)
@@ -1273,7 +1416,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 
 			getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-			elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
+			elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 			if output == "cons_tres" || output == "cons_res" {
 				if len(gpuIdList) == 0 {
 					gpusAlloc = 0
@@ -1285,12 +1428,12 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			}
 		}
 	} else if state == 1 {
-		reason = "Running"
+		reason = "Running" // 正在运行的作业的信息
 		cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 		memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 		nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 		getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-		elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
+		elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 
 		// get stdout stderr path
 		getStdoutPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdOut | awk -F'=' '{print $2}'", jobId)
@@ -1311,7 +1454,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			gpusAlloc = 0
 		}
 	} else {
-		reason = "end of job"
+		reason = "end of job" // 结束状态的作业信息
 		cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 		memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 		nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
@@ -1467,6 +1610,9 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	)
 	var fields []string = in.Fields
 
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 查找SelectType插件的值
@@ -1535,7 +1681,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
 				for _, user := range in.Filter.Users {
-					uid, _ := utils.SearchUidNumberFromLdap(user)
+					// uid, _ := utils.SearchUidNumberFromLdap(user)
+					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
 				for _, state := range in.Filter.States {
@@ -1559,7 +1706,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
 				for _, user := range in.Filter.Users {
-					uid, _ := utils.SearchUidNumberFromLdap(user)
+					// uid, _ := utils.SearchUidNumberFromLdap(user)
+					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
@@ -1629,7 +1777,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
 				for _, user := range in.Filter.Users {
-					uid, _ := utils.SearchUidNumberFromLdap(user)
+					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
 				for _, state := range in.Filter.States {
@@ -1649,7 +1797,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
 				for _, user := range in.Filter.Users {
-					uid, _ := utils.SearchUidNumberFromLdap(user)
+					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
@@ -1723,11 +1871,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		if endTime != 0 {
 			endTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
 		}
-		// startTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(startTime, 0).Unix())}
-		// endTimeTimestamp = &timestamppb.Timestamp{Seconds: int64(time.Unix(endTime, 0).Unix())}
 
-		// username 转换，需要从ldap中拿数据
-		userName, _ := utils.SearchUserUidFromLdap(idUser)
+		userName, _ := utils.GetUserNameByUid(idUser)
 
 		qosSqlconfig := "SELECT name FROM qos_table WHERE id = ? AND deleted = 0"
 		db.QueryRow(qosSqlconfig, idQos).Scan(&qosName)
@@ -1757,7 +1902,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 				nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 				getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-				elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
+				elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 				if output == "cons_tres" || output == "cons_res" {
 					if len(gpuIdList) == 0 {
 						gpusAlloc = 0
@@ -1774,7 +1919,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
 			nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 			getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-			elapsedSeconds = utils.FromCmdGetElapsedSeconds(getElapsedSecondsCmd)
+			elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 			// get stdout stderr path
 			getStdoutPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdOut | awk -F'=' '{print $2}'", jobId)
 			getStderrPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdErr | awk -F'=' '{print $2}'", jobId)
@@ -1810,7 +1955,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				gpusAlloc = 0
 			}
 		}
-
+		// 低版本slurm mem_req 默认值转换为0
 		if memReq == 9223372036854777728 {
 			memReq = 0
 		}
@@ -1921,31 +2066,24 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 // 提交作业
 func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	var scriptString = "#!/bin/bash\n"
-	var name string
-	var loginName string
-	var loginNodeStatusResponse bool = false
-
-	loginNodes := configValue.LoginNodes
-
-	// 检测登录节点的存活状态
-
-	for _, v := range loginNodes {
-		loginNodeStatusResponse = utils.Ping(v)
-		if loginNodeStatusResponse {
-			loginName = v
-			break
-		}
-	}
-	if loginNodeStatusResponse == false {
+	var (
+		scriptString = "#!/bin/bash\n"
+		name         string
+	)
+	// 记录日志
+	logExample.Infof("Received request: %v", in)
+	// 判断账户名、用户名是否包含大写字母
+	resultAcct := utils.ContainsUppercase(in.Account)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultAcct || resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "LOGIN_NODE_UNAVAILABLE",
+			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
 		}
-		st := status.New(codes.Unavailable, "The login nodes all dead.")
+		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 检查账户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE deleted = 0 AND name = ?"
 	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&name)
 	if err != nil {
@@ -1956,7 +2094,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-
+	// 拼接提交作业的batch脚本
 	scriptString += "#SBATCH " + "-A " + in.Account + "\n"
 	scriptString += "#SBATCH " + "--partition=" + in.Partition + "\n"
 	if in.Qos != nil {
@@ -1990,44 +2128,27 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 
 	scriptString += "\n"
 	scriptString += in.Script
-	client := utils.NewSSHClient(in.UserId, loginName, "22")
-	submitJobRes, err := client.RunSubmitJobCommand(scriptString, in.WorkingDirectory)
-
+	// 提交作业
+	submitResponse, err := utils.LocalSubmitJob(scriptString, in.UserId)
 	if err != nil {
-		if strings.Join(submitJobRes, " ") == "login failed" {
-			client := utils.NewSSHClient("root", loginName, "22")
-			// client.sftpClient
-			client.RemoteDirFileCreate(in.UserId)
-			clientNew := utils.NewSSHClient(in.UserId, loginName, "22")
-			submitJobRes, err := clientNew.RunSubmitJobCommand(scriptString, in.WorkingDirectory)
-			if err != nil {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "SBATCH_FAILED",
-				}
-				st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			}
-			jobIdString := submitJobRes[len(submitJobRes)-1]
-			jobId, _ := strconv.Atoi(jobIdString)
-			return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
-		} else {
-			errInfo := &errdetails.ErrorInfo{
-				Reason: "SBATCH_FAILED",
-			}
-			st := status.New(codes.Unknown, strings.Join(submitJobRes, " "))
-			st, _ = st.WithDetails(errInfo)
-			return nil, st.Err()
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SBATCH_FAILED",
 		}
-	} else {
-		jobIdString := submitJobRes[len(submitJobRes)-1]
-		jobId, _ := strconv.Atoi(jobIdString)
-		return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
+		st := status.New(codes.Unknown, submitResponse)
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
 	}
+	responseList := strings.Split(strings.TrimSpace(string(submitResponse)), " ")
+	jobIdString := responseList[len(responseList)-1]
+	jobId, _ := strconv.Atoi(jobIdString)
+	return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
 }
 
 func main() {
-	var err error
+	var (
+		err error
+	)
+	// 连接数据库
 	dbConfig := utils.DatabaseConfig()
 	db, err = sql.Open("mysql", dbConfig)
 	if err != nil {
@@ -2035,8 +2156,24 @@ func main() {
 	}
 	defer db.Close()
 
-	// 监听本地8972端口
-	lis, err := net.Listen("tcp", ":8972")
+	// 创建日志实例
+	logExample = logrus.New()
+	// 设置日志输出格式为JSON
+	logExample.SetFormatter(&logrus.JSONFormatter{})
+	// 设置日志级别为Info
+	logExample.SetLevel(logrus.InfoLevel)
+	// 设置日志输出到控制台和文件中
+	file, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	logExample.SetOutput(io.MultiWriter(os.Stdout, file))
+
+	// 启动服务
+	port := configValue.Service.Port
+	portString := fmt.Sprintf(":%d", port)
+	lis, err := net.Listen("tcp", portString)
 	if err != nil {
 		fmt.Printf("failed to listen: %v", err)
 		return
