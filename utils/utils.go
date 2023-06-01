@@ -3,15 +3,61 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"strconv"
 	"unicode"
 
 	"os/exec"
 	"os/user"
-	config "scow-slurm-adapter/config"
+
 	"strings"
 	"syscall"
+
+	"gopkg.in/yaml.v3"
 )
+
+type MySQLConfig struct {
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	User        string `yaml:"user"`
+	DBName      string `yaml:"dbname"`
+	Password    string `yaml:"password"`
+	ClusterName string `yaml:"clustername"`
+}
+
+type Service struct {
+	Port int `yaml:"port"`
+}
+
+type Slurm struct {
+	DefaultQOS string `yaml:"defaultqos"`
+}
+
+type Config struct {
+	MySQLConfig MySQLConfig `yaml:"mysql"`
+	Service     Service     `yaml:"service"`
+	Slurm       Slurm       `yaml:"slurm"`
+}
+
+var (
+	DefaultConfigPath string = "config/config.yaml"
+)
+
+// 解析配置文件
+func ParseConfig(configFilePath string) *Config {
+	confFile, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	config := &Config{}
+
+	err = yaml.Unmarshal(confFile, config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return config
+}
 
 // 带返回码的shell命令执行函数
 func ExecuteShellCommand(command string) int {
@@ -44,7 +90,7 @@ func RunCommand(command string) (string, error) {
 
 // 数据库配置信息
 func DatabaseConfig() string {
-	config := config.ParseConfig(config.DefaultConfigPath)
+	config := ParseConfig(DefaultConfigPath)
 	host := config.MySQLConfig.Host
 	userName := config.MySQLConfig.User
 	passWord := config.MySQLConfig.Password

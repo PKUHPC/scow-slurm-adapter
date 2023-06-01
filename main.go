@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net"
-	config "scow-slurm-adapter/config"
+
 	"scow-slurm-adapter/utils"
 	"strconv"
 	"strings"
@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	configValue *config.Config
+	configValue *utils.Config
 	db          *sql.DB
 	logExample  *logrus.Logger
 )
@@ -51,7 +51,7 @@ type serverJob struct {
 }
 
 func init() {
-	configValue = config.ParseConfig(config.DefaultConfigPath)
+	configValue = utils.ParseConfig(utils.DefaultConfigPath)
 }
 
 // UserService
