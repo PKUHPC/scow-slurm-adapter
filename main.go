@@ -1575,7 +1575,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		timeSuspended    int64
 		gresUsed         string
 		// elapsedSeconds    int64
-		reason            string
+		// reason            string
 		nodeList          string
 		gpusAlloc         int32
 		cpusAlloc         int32
@@ -1861,6 +1861,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			return nil, st.Err()
 		}
 		var elapsedSeconds int64
+		var reason string
 		var startTimeTimestamp *timestamppb.Timestamp
 		var endTimeTimestamp *timestamppb.Timestamp
 		stateString = utils.ChangeState(state)

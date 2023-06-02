@@ -13,7 +13,7 @@ import (
 func TestGetJobs(t *testing.T) {
 
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestGetJobs(t *testing.T) {
 	user := []string{"test03", "test02"}
 	// account := []string{"c_admin", "a_admin"}
 	account := []string{}
-	state := []string{"CANCELED", "COMPTE"}
+	state := []string{"RUNNING", "CANCELED"}
 	req := &pb.GetJobsRequest{
 		Fields: fields,
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10},
