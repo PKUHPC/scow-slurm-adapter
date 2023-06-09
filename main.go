@@ -1557,29 +1557,29 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.GetJobsResponse, error) {
 	var (
-		jobId            int
-		jobName          string
-		account          string
-		partition        string
-		idQos            int
-		state            int
-		cpusReq          int32
-		memReq           uint64
-		nodeReq          int32
+		jobId     int
+		jobName   string
+		account   string
+		partition string
+		idQos     int
+		state     int
+		cpusReq   int32
+		memReq    uint64
+		// nodeReq          int32
 		timeLimitMinutes int64
 		idUser           int
 		submitTime       int64
-		stdoutPath       string
-		stderrPath       string
-		startTime        int64
-		timeSuspended    int64
-		gresUsed         string
+		// stdoutPath       string
+		// stderrPath       string
+		startTime     int64
+		timeSuspended int64
+		gresUsed      string
 		// elapsedSeconds    int64
 		// reason            string
-		nodeList          string
-		gpusAlloc         int32
-		cpusAlloc         int32
-		memAllocMb        int64
+		nodeList string
+		// gpusAlloc         int32
+		// cpusAlloc         int32
+		// memAllocMb        int64
 		nodesAlloc        int32
 		endTime           int64
 		workingDirectory  string
@@ -1862,6 +1862,14 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		var elapsedSeconds int64
 		var reason string
+		var stdoutPath string
+		var stderrPath string
+		var gpusAlloc int32
+		var cpusAlloc int32
+		var memAllocMb int64
+		var nodeReq int32
+		var nodesAllocTemp int32
+		var nodeListTemp string
 		var startTimeTimestamp *timestamppb.Timestamp
 		var endTimeTimestamp *timestamppb.Timestamp
 		stateString = utils.ChangeState(state)
@@ -1878,6 +1886,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		qosSqlconfig := "SELECT name FROM qos_table WHERE id = ? AND deleted = 0"
 		db.QueryRow(qosSqlconfig, idQos).Scan(&qosName)
 
+		nodesAllocTemp = nodesAlloc
+		nodeListTemp = nodeList
 		if state == 0 || state == 2 {
 			getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
 			output, _ := utils.RunCommand(getReasonCmd)
@@ -1974,7 +1984,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				TimeLimitMinutes: timeLimitMinutes,
 				SubmitTime:       submitTimeTimestamp,
 				WorkingDirectory: workingDirectory,
-				NodeList:         &nodeList,
+				NodeList:         &nodeListTemp,
 				StartTime:        startTimeTimestamp,
 				EndTime:          endTimeTimestamp,
 				StdoutPath:       &stdoutPath,
@@ -1985,6 +1995,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				CpusAlloc:        &cpusAlloc,
 				MemAllocMb:       &memAllocMb,
 				GpusAlloc:        &gpusAlloc,
+				NodesAlloc:       &nodesAllocTemp,
 			})
 		} else {
 			subJobInfo := &pb.JobInfo{}
@@ -2027,7 +2038,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				case "reason":
 					subJobInfo.Reason = &reason
 				case "node_list":
-					subJobInfo.NodeList = &nodeList
+					subJobInfo.NodeList = &nodeListTemp
 				case "gpus_alloc":
 					subJobInfo.GpusAlloc = &gpusAlloc
 				case "cpus_alloc":
@@ -2035,7 +2046,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				case "mem_alloc_mb":
 					subJobInfo.MemAllocMb = &memAllocMb
 				case "nodes_alloc":
-					subJobInfo.NodesAlloc = &nodesAlloc
+					subJobInfo.NodesAlloc = &nodesAllocTemp
 				case "end_time":
 					subJobInfo.EndTime = endTimeTimestamp
 				}
