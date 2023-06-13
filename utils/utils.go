@@ -180,6 +180,7 @@ func GetStateId(stateString string) int {
 }
 
 func GetElapsedSeconds(cmd string) int64 {
+	var elapsedSeconds int64
 	ElapsedSecondsOutput, _ := RunCommand(cmd)
 	// 先判断作业时长中是否包含-
 	// 超过一天的作业
@@ -194,10 +195,21 @@ func GetElapsedSeconds(cmd string) int64 {
 	} else {
 		// 没有超过一天的作业
 		ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, ":")
-		hours, _ := strconv.Atoi(ElapsedSecondsList[0])
-		minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
-		seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
-		elapsedSeconds := int64(seconds) + int64(minutes)*60 + int64(hours)*3600
+		log.Println(ElapsedSecondsList, 111)
+		if len(ElapsedSecondsList) == 2 {
+			minutes, _ := strconv.Atoi(ElapsedSecondsList[0])
+			seconds, _ := strconv.Atoi(ElapsedSecondsList[1])
+			elapsedSeconds = int64(seconds) + int64(minutes)*60
+		} else {
+			hours, _ := strconv.Atoi(ElapsedSecondsList[0])
+			minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
+			seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
+			elapsedSeconds = int64(seconds) + int64(minutes)*60 + int64(hours)*3600
+		}
+		// hours, _ := strconv.Atoi(ElapsedSecondsList[0])
+		// minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
+		// seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
+		// elapsedSeconds := int64(seconds) + int64(minutes)*60 + int64(hours)*3600
 		return elapsedSeconds
 	}
 }
@@ -336,4 +348,68 @@ func LocalCancelJob(username string, jobId int) (string, error) {
 	}
 
 	return output.String(), nil
+}
+
+// 获取map信息
+func GetMapInfo(pendingString string) map[int]string {
+	m := make(map[int]string)
+
+	pairs := strings.Split(pendingString, ",")
+	for _, pair := range pairs {
+		kv := strings.Split(pair, " ")
+		if len(kv) != 2 {
+			continue
+		}
+		key, err := strconv.Atoi(kv[0])
+		if err != nil {
+			continue
+		}
+		value := strings.Trim(kv[1], "()")
+		m[key] = value
+	}
+	return m
+}
+
+// 判断arr2 是否为arr1的子集
+func IsSubSet(arr1, arr2 []string) bool {
+	// 创建一个map，用于记录arr1中的元素
+	m := make(map[string]bool)
+	// 将arr1中的元素添加到map中
+	for _, num := range arr1 {
+		m[num] = true
+	}
+	// 遍历arr2中的元素，判断是否都在map中
+	for _, num := range arr2 {
+		if !m[num] {
+			return false
+		}
+	}
+	return true
+}
+
+func GetRunningElapsedSeconds(timeString string) int64 {
+	var elapsedSeconds int64
+	if strings.Contains(timeString, "-") {
+		ElapsedSecondsList := strings.Split(timeString, "-")
+		day, _ := strconv.Atoi(ElapsedSecondsList[0])
+		ElapsedSecondsListNew := strings.Split(ElapsedSecondsList[1], ":")
+		hours, _ := strconv.Atoi(ElapsedSecondsListNew[0])
+		minutes, _ := strconv.Atoi(ElapsedSecondsListNew[1])
+		seconds, _ := strconv.Atoi(ElapsedSecondsListNew[2])
+		return int64(seconds) + int64(minutes)*60 + int64(hours)*3600 + int64(day)*24*3600
+	} else {
+		// 没有超过一天的作业
+		ElapsedSecondsList := strings.Split(timeString, ":")
+		if len(ElapsedSecondsList) == 2 {
+			minutes, _ := strconv.Atoi(ElapsedSecondsList[0])
+			seconds, _ := strconv.Atoi(ElapsedSecondsList[1])
+			elapsedSeconds = int64(seconds) + int64(minutes)*60
+		} else {
+			hours, _ := strconv.Atoi(ElapsedSecondsList[0])
+			minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
+			seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
+			elapsedSeconds = int64(seconds) + int64(minutes)*60 + int64(hours)*3600
+		}
+		return elapsedSeconds
+	}
 }
