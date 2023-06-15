@@ -11,7 +11,7 @@ import (
 
 func TestGetClusterConfig(t *testing.T) {
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}

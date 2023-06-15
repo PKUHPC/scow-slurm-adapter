@@ -370,6 +370,26 @@ func GetMapInfo(pendingString string) map[int]string {
 	return m
 }
 
+// 获取map信息
+func GetPendingMapInfo(pendingString string) map[int]string {
+	m := make(map[int]string)
+
+	pairs := strings.Split(pendingString, ";")
+	for _, pair := range pairs {
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			continue
+		}
+		key, err := strconv.Atoi(kv[0])
+		if err != nil {
+			continue
+		}
+		value := strings.Trim(kv[1], "()")
+		m[key] = value
+	}
+	return m
+}
+
 // 判断arr2 是否为arr1的子集
 func IsSubSet(arr1, arr2 []string) bool {
 	// 创建一个map，用于记录arr1中的元素

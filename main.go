@@ -65,7 +65,7 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	)
 
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request AddUserToAccount: %v", in)
 
 	// 获取机器名和默认Qos
 	clusterName := configValue.MySQLConfig.ClusterName
@@ -179,7 +179,7 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		acctList []string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request RemoveUserFromAccount: %v", in)
 	// 获取集群名
 	clusterName := configValue.MySQLConfig.ClusterName
 
@@ -354,7 +354,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		user     string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request BlockUserInAccount: %v", in)
 
 	// 检查账户名、用户名是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
@@ -425,7 +425,7 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		maxSubmitJobs int
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request UnblockUserInAccount: %v", in)
 	// 检查账户名、用户名是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	resultUser := utils.ContainsUppercase(in.UserId)
@@ -500,7 +500,7 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		maxSubmitJobs int
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request QueryUserInAccountBlockStatus: %v", in)
 	// 检查账户名、用户名是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	resultUser := utils.ContainsUppercase(in.UserId)
@@ -564,7 +564,7 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		acctList  []string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request ListAccounts: %v", in)
 	// 检查用户名中是否包含大写字母
 	resultUser := utils.ContainsUppercase(in.UserId)
 	if resultUser {
@@ -590,7 +590,7 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		return nil, st.Err()
 	}
 	// 查询用户相关联的所有账户信息
-	assocSqlConfig := fmt.Sprintf("SELECT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0", clusterName)
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE user = ? AND deleted = 0", clusterName)
 	rows, err := db.Query(assocSqlConfig, in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -622,6 +622,7 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	logger.Infof("%v", acctList)
 	return &pb.ListAccountsResponse{Accounts: acctList}, nil
 }
 
@@ -632,7 +633,7 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		qosList  []string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request CreateAccount: %v", in)
 	// 检查账户名、用户名是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	resultUser := utils.ContainsUppercase(in.OwnerUserId)
@@ -711,7 +712,7 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		acctList      []string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request BlockAccount: %v", in)
 	// 检查账户名中是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	if resultAcct {
@@ -801,7 +802,7 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		acctName string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request UnblockAccount: %v", in)
 	// 检查用户名中是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	if resultAcct {
@@ -853,7 +854,7 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		acctInfo      []*pb.ClusterAccountInfo
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request GetAllAccountsWithUsers: %v", in)
 	// 获取集群名
 	clusterName := configValue.MySQLConfig.ClusterName
 
@@ -969,7 +970,7 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		acctName string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request QueryAccountBlockStatus: %v", in)
 	// 检查用户名中是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.AccountName)
 	if resultAcct {
@@ -1018,7 +1019,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		totalNodeNumInt int
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request GetClusterConfig: %v", in)
 	// 获取系统计算分区信息
 	partitions, _ := utils.GetPatitionInfo()
 	// 查系统中的所有qos
@@ -1059,6 +1060,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			totalGpus uint32
 			comment   string
 			qos       []string
+			totalMems int
 		)
 
 		getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
@@ -1067,16 +1069,29 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		if err == nil {
 			configArray := strings.Split(output, ",")
 			totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
-			totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}' | awk -F'M' '{print $1}'", configArray[1])
+			// totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}' | awk -F'M' '{print $1}'", configArray[1])
+			totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
 			totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
 
 			totalCpus, _ := utils.RunCommand(totalCpusCmd)
-			totalMems, _ := utils.RunCommand(totalMemsCmd)
+			totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
+			// totalMems1, _ := utils.RunCommand(totalMemsCmd1)
+			if strings.Contains(totalMemsTmp, "M") {
+				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
+				totalMems = totalMemsInt
+			} else if strings.Contains(totalMemsTmp, "G") {
+				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "G")[0])
+				totalMems = totalMemsInt * 1024
+			} else if strings.Contains(totalMemsTmp, "T") {
+				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "T")[0])
+				totalMems = totalMemsInt * 1024 * 1024
+			}
 			totalNodes, _ := utils.RunCommand(totalNodesCmd)
 
 			// 将字符串转换为int
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
-			totalMemInt, _ = strconv.Atoi(totalMems)
+			// totalMemInt, _ = strconv.Atoi(totalMems)
+			totalMemInt = totalMems
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 		} else {
 			// 获取总cpu、总内存、总节点数
@@ -1107,6 +1122,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalMemInt = nodeMem * totalNodeNumInt
 			}
 		}
+
 		// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 		getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
 		nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
@@ -1118,13 +1134,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 			gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
+			log.Println(nodeName)
 			gpusOutput, _ := utils.RunCommand(gpusCmd)
+			log.Println(gpusOutput)
 			if gpusOutput == "Gres=(null)" {
 				totalGpus = 0
 			} else {
 				// 字符串转整型
 				perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
-				totalGpus = uint32(perNodeGpuNum)
+				totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
 			}
 		} else {
 			getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
@@ -1175,7 +1193,7 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		idJob    int
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request CancelJob: %v", in)
 	// 检查用户名中是否包含大写字母
 	resultUser := utils.ContainsUppercase(in.UserId)
 	if resultUser {
@@ -1227,6 +1245,7 @@ func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 	var (
 		timeLimit uint64
 	)
+	logger.Infof("Received request QueryJobTimeLimit: %v", in)
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 通过jobId来查找作业信息
@@ -1248,7 +1267,7 @@ func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 		idJob int
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request ChangeJobTimeLimit: %v", in)
 
 	clusterName := configValue.MySQLConfig.ClusterName
 
@@ -1315,7 +1334,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	var fields []string = in.Fields
 
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request GetJobById: %v", in)
 
 	clusterName := configValue.MySQLConfig.ClusterName
 	// 根据jobid查询作业详细信息
@@ -1390,11 +1409,9 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	// 状态为排队和挂起的作业信息
 	if state == 0 || state == 2 {
-		logger.Infof("%v", time.Now().Unix())
 		getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
 		output, _ := utils.RunCommand(getReasonCmd)
 		reason = output
-		logger.Infof("%v", time.Now().Unix())
 		// 获取 stdout stderr 路径信息(不用了)
 		// getStdoutPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdOut | awk -F'=' '{print $2}'", jobId)
 		// getStderrPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdErr | awk -F'=' '{print $2}'", jobId)
@@ -1410,11 +1427,9 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			// nodeReqOutput, _ := utils.RunCommand(getNodeReqCmd)
 			// nodeNum, _ := strconv.Atoi(nodeReqOutput)
 			// nodeReq = int32(nodeNum)
-			logger.Infof("%v", time.Now().Unix())
 			nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 			elapsedSeconds = 0
 			gpusAlloc = 0
-			logger.Infof("%v", time.Now().Unix())
 		} else {
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
@@ -1610,20 +1625,29 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		params            []interface{}
 		totalParams       []interface{}
 		pendingMap        map[int]string
+		pendingUserMap    map[int]string
 	)
 	clusterName := configValue.MySQLConfig.ClusterName
 	var fields []string = in.Fields
 
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request GetJobs: %v", in)
 
 	var filterStates = in.Filter.States // 这个是筛选的
 	var baseStates = []string{"RUNNING", "PENDING", "SUSPEND"}
 	var submitUser = in.Filter.Users
 	setBool := utils.IsSubSet(baseStates, filterStates)
-	if setBool && len(submitUser) != 0 {
+
+	pendingUserCmdTemp := fmt.Sprintf("squeue -t pending -u %s", strings.Join(submitUser, ","))
+	pendingUserCmd := pendingUserCmdTemp + " --noheader --format='%i=%R' | tr '\\n' ';'"
+	pendingUserResult, _ := utils.RunCommand(pendingUserCmd)
+	if len(pendingUserResult) != 0 {
+		pendingUserMap = utils.GetPendingMapInfo(pendingUserResult)
+	}
+
+	if setBool && len(filterStates) != 0 && len(submitUser) != 0 {
 		getJobInfoCmdLine := fmt.Sprintf("squeue -u %s --noheader", strings.Join(submitUser, ","))
-		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %R %S %T %u %V %Z %n %N' | tr '\n' ','"
+		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
 		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
 		runningJobInfoList := strings.Split(runningjobInfo, ",")
 		for _, v := range runningJobInfoList {
@@ -1637,13 +1661,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			if len(v) != 0 {
 				singerJobInfo := strings.Split(v, " ")
 				singerJobAccount := singerJobInfo[0]
-				singerJobUserName := singerJobInfo[13]
+				singerJobUserName := singerJobInfo[12]
 				singerJobJobId, _ := strconv.Atoi(singerJobInfo[1])
-				singerJobState := singerJobInfo[12]
+				singerJobState := singerJobInfo[11]
 				singerJobJobPartition := singerJobInfo[8]
 				singerJobJobName := singerJobInfo[4]
 				singerJobQos := singerJobInfo[9]
-				singerJobWorkingDirectory := singerJobInfo[15]
+				singerJobWorkingDirectory := singerJobInfo[14]
 				singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[5])
 				submittimeSqlConfig := fmt.Sprintf("SELECT time_submit FROM %s_job_table WHERE id_job = ?", clusterName)
 				db.QueryRow(submittimeSqlConfig, singerJobJobId).Scan(&timeSubmit)
@@ -1654,18 +1678,21 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				if singerJobState == "PENDING" {
 					singerJobJobNodesAlloc = 0
-					singerJobJobReason = singerJobInfo[10]
+					// singerJobJobReason = singerJobInfo[17] //
+					if _, ok := pendingUserMap[singerJobJobId]; ok {
+						singerJobJobReason = pendingUserMap[singerJobJobId]
+					}
 					singerJobCpusAlloc = 0
 					singerJobElapsedSeconds = 0
 					singerJobInfoNodeList = "None assigned"
 				} else {
 					singerJobJobNodesAllocTemp, _ := strconv.Atoi(singerJobInfo[3])
 					singerJobJobNodesAlloc = int32(singerJobJobNodesAllocTemp)
-					singerJobJobReason = singerJobInfo[12]
+					singerJobJobReason = singerJobInfo[11]
 					singerJobCpusAllocTemp, _ := strconv.Atoi(singerJobInfo[2])
 					singerJobCpusAlloc = int32(singerJobCpusAllocTemp)
 					singerJobElapsedSeconds = utils.GetRunningElapsedSeconds(singerJobInfo[7])
-					singerJobInfoNodeList = singerJobInfo[10]
+					singerJobInfoNodeList = singerJobInfo[15]
 				}
 				jobInfo = append(jobInfo, &pb.JobInfo{
 					JobId:            uint32(singerJobJobId),
@@ -1688,7 +1715,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 	}
-
 	// 查找SelectType插件的值
 	slurmSelectTypeConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
 	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
@@ -2164,7 +2190,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		name         string
 	)
 	// 记录日志
-	logger.Infof("Received request: %v", in)
+	logger.Infof("Received request SubmitJob: %v", in)
 	// 判断账户名、用户名是否包含大写字母
 	resultAcct := utils.ContainsUppercase(in.Account)
 	resultUser := utils.ContainsUppercase(in.UserId)
