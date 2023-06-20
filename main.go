@@ -319,7 +319,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		}
 
 		// 没作业下直接删除用户
-		deletedUserCmd := fmt.Sprintf("sacctmgr -i delete user name=%s account=%s", in.UserId, in.AccountName)
+		// deletedUserCmd := fmt.Sprintf("sacctmgr -i delete user name=%s account=%s", in.UserId, in.AccountName)
+		deletedUserCmd := fmt.Sprintf("sacctmgr -i delete user name=%s", in.UserId)
 		res := utils.ExecuteShellCommand(deletedUserCmd)
 		if res == 0 {
 			return &pb.RemoveUserFromAccountResponse{}, nil
@@ -1283,7 +1284,6 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 	for _, partition := range partitions {
 		var (
 			totalMems int
-			// totalNodeNumInt int
 			totalGpus uint32
 			comment   string
 			qos       []string
@@ -1331,7 +1331,7 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					totalMemInt = nodeMem * totalNodeNumInt
 				}
 			}
-			// 获取总cpu、总内存、总节点数
+			// 获取总cpu、总节点数
 			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
 			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
@@ -1399,7 +1399,6 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			continue
 		}
 	}
-	log.Println(parts, 1111)
 	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
