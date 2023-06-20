@@ -7,14 +7,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	// "google.golang.org/protobuf/types/known/timestamppb"
 	// "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestGetJobs(t *testing.T) {
 
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024*1024*1024)))
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}
@@ -26,14 +26,14 @@ func TestGetJobs(t *testing.T) {
 	fields := []string{}
 	user := []string{"test03", "test02"}
 	// account := []string{"c_admin", "a_admin"}
-	account := []string{}
+	// account := []string{}
 	// state := []string{"RUNNING", "PENDING"}
 	req := &pb.GetJobsRequest{
 		Fields: fields,
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10},
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state},
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account},
-		Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, EndTime: &pb.TimeRange{EndTime: &timestamppb.Timestamp{Seconds: 1682406485}}},
+		Filter: &pb.GetJobsRequest_Filter{Users: user},
 	}
 	res, err := client.GetJobs(context.Background(), req)
 	if err != nil {

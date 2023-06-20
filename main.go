@@ -622,7 +622,6 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	logger.Infof("%v", acctList)
 	return &pb.ListAccountsResponse{Accounts: acctList}, nil
 }
 
@@ -1134,9 +1133,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 			gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
-			log.Println(nodeName)
 			gpusOutput, _ := utils.RunCommand(gpusCmd)
-			log.Println(gpusOutput)
 			if gpusOutput == "Gres=(null)" {
 				totalGpus = 0
 			} else {
@@ -1184,6 +1181,226 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 	}
 	// 增加调度器的名字, 针对于特定的适配器做的接口
 	return &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"}, nil
+}
+
+func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAvailablePartitionsRequest) (*pb.GetAvailablePartitionsResponse, error) {
+	var (
+		parts           []*pb.Partition // 定义返回的类型
+		userName        string
+		user            string
+		acctName        string
+		qosName         string
+		qosList         []string
+		totalCpuInt     int
+		totalMemInt     int
+		totalNodeNumInt int
+	)
+	// 记录日志
+	logger.Infof("Received request GetAvailablePartitions: %v", in)
+	// 检查用户名中是否包含大写字母
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 获取集群名
+	clusterName := configValue.MySQLConfig.ClusterName
+
+	// 检查账户名是否在slurm中
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "Account does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	// 判断用户是否存在
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "The user does not exists.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 检查账户和用户之间是否存在关联关系
+	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
+	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_ACCOUNT_NOT_FOUND",
+		}
+		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	// 查系统中的所有qos
+	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
+	rows, err := db.Query(qosSqlConfig)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, err.Error())
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&qosName)
+		if err != nil {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "SQL_QUERY_FAILED",
+			}
+			st := status.New(codes.Internal, err.Error())
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		qosList = append(qosList, qosName)
+	}
+	err = rows.Err()
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SQL_QUERY_FAILED",
+		}
+		st := status.New(codes.Internal, err.Error())
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 关联关系存在的情况下去找用户
+	partitions, _ := utils.GetPatitionInfo()
+	for _, partition := range partitions {
+		var (
+			totalMems int
+			// totalNodeNumInt int
+			totalGpus uint32
+			comment   string
+			qos       []string
+		)
+		getPartitionAllowAccountsCmd := fmt.Sprintf("scontrol show part=%s | grep -i AllowAccounts | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
+		accouts, _ := utils.RunCommand(getPartitionAllowAccountsCmd)
+		if accouts == "ALL" || strings.Contains(accouts, in.AccountName) {
+			// 包含account
+			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
+			output, err := utils.RunCommand(getPartitionInfoCmd)
+			if err == nil {
+				configArray := strings.Split(output, ",")
+				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
+				totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
+				// totalMems1, _ := utils.RunCommand(totalMemsCmd1)
+				if strings.Contains(totalMemsTmp, "M") {
+					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
+					totalMems = totalMemsInt
+				} else if strings.Contains(totalMemsTmp, "G") {
+					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "G")[0])
+					totalMems = totalMemsInt * 1024
+				} else if strings.Contains(totalMemsTmp, "T") {
+					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "T")[0])
+					totalMems = totalMemsInt * 1024 * 1024
+				}
+				totalMemInt = totalMems
+			} else {
+				// 取节点名，默认取第一个元素，在判断有没有[特殊符合
+				getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
+				nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+				nodeArray := strings.Split(nodeOutput, ",")
+				res := strings.Contains(nodeArray[0], "[")
+				if res {
+					getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
+					nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+					nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
+					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
+					memOutput, _ := utils.RunCommand(getMemCmd)
+					nodeMem, _ := strconv.Atoi(memOutput)
+					totalMemInt = nodeMem * totalNodeNumInt
+				} else {
+					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
+					memOutput, _ := utils.RunCommand(getMemCmd)
+					nodeMem, _ := strconv.Atoi(memOutput)
+					totalMemInt = nodeMem * totalNodeNumInt
+				}
+			}
+			// 获取总cpu、总内存、总节点数
+			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
+			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			totalCpuInt, _ = strconv.Atoi(totalCpus)
+			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
+			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
+
+			// 取节点名，默认取第一个元素，在判断有没有[特殊符合
+			getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
+			nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+			nodeArray := strings.Split(nodeOutput, ",")
+
+			res := strings.Contains(nodeArray[0], "[")
+			if res {
+				getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
+				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
+				gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
+				gpusOutput, _ := utils.RunCommand(gpusCmd)
+				if gpusOutput == "Gres=(null)" {
+					totalGpus = 0
+				} else {
+					// 字符串转整型
+					perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
+					totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
+				}
+			} else {
+				getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
+				gpusOutput, _ := utils.RunCommand(getGpusCmd)
+				if gpusOutput == "Gres=(null)" {
+					totalGpus = 0
+				} else {
+					perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
+					totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
+				}
+			}
+			getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
+			qosOutput, _ := utils.RunCommand(getPartitionQosCmd)
+			qosArray := strings.Split(qosOutput, "=")
+
+			// 获取AllowQos
+			getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
+			// 返回的是字符串
+			allowQosOutput, _ := utils.RunCommand(getPartitionAllowQosCmd)
+
+			if qosArray[len(qosArray)-1] != "N/A" {
+				qos = append(qos, qosArray[len(qosArray)-1])
+			} else {
+				if allowQosOutput == "ALL" {
+					qos = qosList
+				} else {
+					qos = strings.Split(allowQosOutput, ",")
+				}
+			}
+			parts = append(parts, &pb.Partition{
+				Name:    partition,
+				MemMb:   uint64(totalMemInt),
+				Cores:   uint32(totalCpuInt),
+				Gpus:    totalGpus,
+				Nodes:   uint32(totalNodeNumInt),
+				Qos:     qos,
+				Comment: &comment,
+			})
+		} else {
+			continue
+		}
+	}
+	log.Println(parts, 1111)
+	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
 // job service
@@ -1959,12 +2176,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	for rows.Next() {
 		err := rows.Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 		if err != nil {
-			errInfo := &errdetails.ErrorInfo{
-				Reason: "SQL_QUERY_FAILED",
-			}
-			st := status.New(codes.Internal, err.Error())
-			st, _ = st.WithDetails(errInfo)
-			return nil, st.Err()
+			// errInfo := &errdetails.ErrorInfo{
+			// 	Reason: "SQL_QUERY_FAILED",
+			// }
+			// st := status.New(codes.Internal, err.Error())
+			// st, _ = st.WithDetails(errInfo)
+			// return nil, st.Err()
+			continue
 		}
 		var elapsedSeconds int64
 		var reason string
@@ -2298,7 +2516,10 @@ func main() {
 		return
 	}
 
-	s := grpc.NewServer() // 创建gRPC服务器
+	s := grpc.NewServer(
+		grpc.MaxRecvMsgSize(1024*1024*1024), // 最大接受size 1GB
+		grpc.MaxSendMsgSize(1024*1024*1024), // 最大发送size 1GB
+	) // 创建gRPC服务器
 	pb.RegisterUserServiceServer(s, &serverUser{})
 	pb.RegisterAccountServiceServer(s, &serverAccount{})
 	pb.RegisterConfigServiceServer(s, &serverConfig{})
