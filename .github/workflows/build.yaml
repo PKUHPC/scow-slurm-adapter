@@ -24,23 +24,27 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: stable
-        
+
       - name: PB Codegen
         run: make protos
-        
+
       - name: Test
         # When unit test is ready, change this to true
         if: false
         run: make test
 
-      - name: Build binary
-        run: CGO_BUILD=0 make build
+      - name: Build binaries
+        run: |
+          make ARCH=amd64 build
+          make ARCH=arm64 build
 
       - name: Upload binary
         uses: actions/upload-artifact@v3
         with:
           name: scow-slurm-adapter
-          path: ./scow-slurm-adapter
+          path: |
+            ./scow-slurm-adapter-amd64
+            ./scow-slurm-adapter-arm64
 
   release:
     runs-on: ubuntu-latest
@@ -70,4 +74,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            release/scow-slurm-adapter
+            release/scow-slurm-adapter-amd64
+            release/scow-slurm-adapter-arm64
