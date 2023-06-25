@@ -1929,6 +1929,25 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				})
 			}
 		}
+
+		if in.Sort != nil && len(jobInfo) != 0 {
+			// 排序
+			var sortKey string
+			if in.Sort.GetField() == "" {
+				sortKey = "JobId"
+			} else {
+				sortKey = in.Sort.GetField()
+				// 字段转换
+				words := strings.Split(sortKey, "_")
+				for i := 0; i < len(words); i++ {
+					words[i] = strings.Title(words[i])
+				}
+				sortKey = strings.Join(words, "")
+			}
+			sortOrder := in.Sort.GetOrder().String()
+			sortJobinfo := utils.SortJobInfo(sortKey, sortOrder, jobInfo)
+			return &pb.GetJobsResponse{Jobs: sortJobinfo}, nil
+		}
 		return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 	}
 	// 查找SelectType插件的值
@@ -1997,7 +2016,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			// 四种情况
 			if len(in.Filter.Users) != 0 && len(in.Filter.States) != 0 {
 				for _, user := range in.Filter.Users {
-					// uid, _ := utils.SearchUidNumberFromLdap(user)
 					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
@@ -2022,7 +2040,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
 				for _, user := range in.Filter.Users {
-					// uid, _ := utils.SearchUidNumberFromLdap(user)
 					uid, _, _ := utils.GetUserUidGid(user)
 					uidList = append(uidList, uid)
 				}
@@ -2175,12 +2192,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	for rows.Next() {
 		err := rows.Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 		if err != nil {
-			// errInfo := &errdetails.ErrorInfo{
-			// 	Reason: "SQL_QUERY_FAILED",
-			// }
-			// st := status.New(codes.Internal, err.Error())
-			// st, _ = st.WithDetails(errInfo)
-			// return nil, st.Err()
 			continue
 		}
 		var elapsedSeconds int64
@@ -2212,10 +2223,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		nodesAllocTemp = nodesAlloc
 		nodeListTemp = nodeList
 		if state == 0 || state == 2 {
-			// getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
-			// output, _ := utils.RunCommand(getReasonCmd)
-			// reason = output
-
 			if _, ok := pendingMap[jobId]; ok {
 				reason = pendingMap[jobId]
 			} else {
@@ -2227,20 +2234,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			if state == 0 {
 				cpusAlloc = 0
 				memAllocMb = 0
-				// getNodeReqCmd := fmt.Sprintf("squeue  -h | grep ' %d '  | awk '{print $7}'", jobId)
-				// nodeReqOutput, _ := utils.RunCommand(getNodeReqCmd)
-				// jobId, _ := strconv.Atoi(nodeReqOutput)
-				// nodeReq = int32(jobId)
 				nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 				elapsedSeconds = 0
 				gpusAlloc = 0
 			} else {
 				cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 				memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
-				// nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 				nodeReq = nodesAlloc
-				// getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-				// elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 				elapsedSeconds = time.Now().Unix() - startTime
 				if output == "cons_tres" || output == "cons_res" {
 					if len(gpuIdList) == 0 {
@@ -2256,10 +2256,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			reason = "Running"
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
-			// nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 			nodeReq = nodesAlloc
-			// getElapsedSecondsCmd := fmt.Sprintf("scontrol show job=%d | grep 'RunTime' | awk '{print $1}' | awk -F'=' '{print $2}'", jobId)
-			// elapsedSeconds = utils.GetElapsedSeconds(getElapsedSecondsCmd)
 			elapsedSeconds = time.Now().Unix() - startTime
 			if output == "cons_tres" || output == "cons_res" {
 				if len(gpuIdList) == 0 {
@@ -2274,12 +2271,10 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			reason = "end of job"
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
-			// nodeReq = int32(utils.GetResInfoNumFromTresInfo(tresReq, nodeTresId))
 			nodeReq = nodesAlloc
 			if startTime != 0 && endTime != 0 {
 				elapsedSeconds = endTime - startTime
 			}
-			// elapsedSeconds = endTime - startTime
 			if output == "cons_tres" || output == "cons_res" {
 				if len(gpuIdList) == 0 {
 					gpusAlloc = 0
@@ -2395,7 +2390,47 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		} else {
 			totalCount = uint32(count)/uint32(pageLimit) + 1
 		}
+		// 新加排序功能
+		if in.Sort != nil && len(jobInfo) != 0 {
+			// 排序
+			var sortKey string
+			if in.Sort.GetField() == "" {
+				// 默认是按jobid排序
+				sortKey = "JobId"
+			} else {
+				sortKey = in.Sort.GetField()
+				// 字段转换
+				words := strings.Split(sortKey, "_")
+				for i := 0; i < len(words); i++ {
+					words[i] = strings.Title(words[i])
+				}
+				sortKey = strings.Join(words, "")
+			}
+			sortOrder := in.Sort.GetOrder().String()
+			sortJobinfo := utils.SortJobInfo(sortKey, sortOrder, jobInfo)
+			return &pb.GetJobsResponse{Jobs: sortJobinfo}, nil
+		}
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
+	}
+	// 新加排序功能
+	if in.Sort != nil && len(jobInfo) != 0 {
+		// 排序
+		var sortKey string
+		if in.Sort.GetField() == "" {
+			// 默认是按jobid进行排序
+			sortKey = "JobId"
+		} else {
+			sortKey = in.Sort.GetField()
+			// 字段转换
+			words := strings.Split(sortKey, "_")
+			for i := 0; i < len(words); i++ {
+				words[i] = strings.Title(words[i])
+			}
+			sortKey = strings.Join(words, "")
+		}
+		sortOrder := in.Sort.GetOrder().String()
+		sortJobinfo := utils.SortJobInfo(sortKey, sortOrder, jobInfo)
+		return &pb.GetJobsResponse{Jobs: sortJobinfo}, nil
 	}
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }

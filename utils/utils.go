@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"reflect"
+	"sort"
 	"strconv"
 	"unicode"
 
 	"os/exec"
 	"os/user"
 
+	pb "scow-slurm-adapter/gen/go"
 	"strings"
 	"syscall"
 
@@ -432,4 +435,48 @@ func GetRunningElapsedSeconds(timeString string) int64 {
 		}
 		return elapsedSeconds
 	}
+}
+
+func sortByKey(list []*pb.JobInfo, fieldName string, sortOrder string) bool {
+	if sortOrder == "ASC" {
+		sort.Slice(list, func(i, j int) bool {
+			fieldValueI := reflect.ValueOf(list[i]).Elem().FieldByName(fieldName)
+			fieldValueJ := reflect.ValueOf(list[j]).Elem().FieldByName(fieldName)
+			switch fieldValueI.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return fieldValueI.Int() < fieldValueJ.Int()
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				return fieldValueI.Uint() > fieldValueJ.Uint()
+			case reflect.Float32, reflect.Float64:
+				return fieldValueI.Float() < fieldValueJ.Float()
+			case reflect.String:
+				return fieldValueI.String() < fieldValueJ.String()
+			default:
+				return false
+			}
+		})
+	} else if sortOrder == "DESC" {
+		sort.Slice(list, func(i, j int) bool {
+			fieldValueI := reflect.ValueOf(list[i]).Elem().FieldByName(fieldName)
+			fieldValueJ := reflect.ValueOf(list[j]).Elem().FieldByName(fieldName)
+			switch fieldValueI.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return fieldValueI.Int() > fieldValueJ.Int()
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				return fieldValueI.Uint() > fieldValueJ.Uint()
+			case reflect.Float32, reflect.Float64:
+				return fieldValueI.Float() > fieldValueJ.Float()
+			case reflect.String:
+				return fieldValueI.String() > fieldValueJ.String()
+			default:
+				return false
+			}
+		})
+	}
+	return true
+}
+
+func SortJobInfo(sortKey string, sortOrder string, jobInfo []*pb.JobInfo) []*pb.JobInfo {
+	sortByKey(jobInfo, sortKey, sortOrder)
+	return jobInfo
 }

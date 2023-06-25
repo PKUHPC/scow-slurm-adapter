@@ -27,13 +27,14 @@ func TestGetJobs(t *testing.T) {
 	user := []string{"test03", "test02"}
 	// account := []string{"c_admin", "a_admin"}
 	// account := []string{}
-	// state := []string{"RUNNING", "PENDING"}
+	state := []string{"RUNNING", "PENDING"}
 	req := &pb.GetJobsRequest{
 		Fields: fields,
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state, EndTime: &pb.TimeRange{StartTime: &timestamppb.Timestamp{Seconds: 1682066342}, EndTime: &timestamppb.Timestamp{Seconds: 1682586485}}}, PageInfo: &pb.PageInfo{Page: 1, PageSize: 10},
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account, States: state},
 		// Filter: &pb.GetJobsRequest_Filter{Users: user, Accounts: account},
-		Filter: &pb.GetJobsRequest_Filter{Users: user},
+		Filter: &pb.GetJobsRequest_Filter{Users: user, States: state},
+		// Sort:   &pb.SortInfo{Field: "state", Order: pb.SortInfo_DESC},
 	}
 	res, err := client.GetJobs(context.Background(), req)
 	if err != nil {
