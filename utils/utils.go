@@ -37,10 +37,15 @@ type Slurm struct {
 	DefaultQOS string `yaml:"defaultqos"`
 }
 
+type Modulepath struct {
+	Path string `yaml:"path"`
+}
+
 type Config struct {
 	MySQLConfig MySQLConfig `yaml:"mysql"`
 	Service     Service     `yaml:"service"`
 	Slurm       Slurm       `yaml:"slurm"`
+	Modulepath  Modulepath  `yaml:"modulepath"`
 }
 
 var (
@@ -315,6 +320,7 @@ func ContainsUppercase(s string) bool {
 // 本地提交作业函数
 func LocalSubmitJob(scriptString string, username string) (string, error) {
 	// 提交作业命令行
+	// cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
 	cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
 	cmd := exec.Command("bash", "-c", cmdLine)
 
@@ -333,6 +339,18 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 	}
 
 	return output.String(), nil
+}
+
+func GetUserHomedir(username string) (string, error) {
+	// 获取指定用户名的用户信息
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", err
+	}
+
+	// 获取家目录
+	homeDir := u.HomeDir
+	return homeDir, nil
 }
 
 // 取消作业函数

@@ -72,6 +72,9 @@ service:
 slurm:
   defaultqos: normal                              # 指定slurm默认qos信息
 
+# module profile文件路径
+modulepath:
+  path: /lustre/software/module/5.2.0/init/profile.sh     # 指定module profile文件路径
 ```
 **注意：如果slurmdbd服务不在slurm管理节点上，在config.yaml配置文件中指定数据库配置后，还需要在slurmdbd服务所在节点上为访问数据库服务的用户授权。**
 
@@ -86,18 +89,18 @@ slurm:
 在scow-slum-adapter 目录下执行编译命令
 [root@manage01 scow-slurm-adapter]# make build   
 ```
-**注意：执行完编译命令后会在当前目录生成名为scow-slurm-adapter的二进制文件。**
+**注意：执行完编译命令后会在当前目录生成名为scow-slurm-adapter-amd64的二进制文件。**
 
 ## 4 部署slurm适配器
 ### 4.1 直接在代码目录下部署slurm适配器（生成二进制文件的目录） 
 ```bash
-[root@manage01 scow-slurm-adapter]# nohup ./scow-slurm-adapter > server.log 2>&1 &
+[root@manage01 scow-slurm-adapter]# nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &
 ```
 ### 4.2 在其他目录部署slurm适配器
 ```bash
 # 在部署机上创建一个部署目录
 mkdir /opt/adapter   # 在opt下创建adapter目录用来部署slurm适配器
 cp -r /root/scow-slurm-adapter/config  /opt/adapter #将配置文件拷贝至部署目录
-cp /root/scow-slurm-adapter/scow-slurm-adapter  /opt/adapter  # 将编译生成的二进制文件拷贝至部署目录
-cd /opt/adapter && nohup ./scow-slurm-adapter > server.log 2>&1 &  # 在部署目录中直接启动slurm适配器
+cp /root/scow-slurm-adapter/scow-slurm-adapter-amd64  /opt/adapter  # 将编译生成的二进制文件拷贝至部署目录
+cd /opt/adapter && nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &  # 在部署目录中直接启动slurm适配器
 ```

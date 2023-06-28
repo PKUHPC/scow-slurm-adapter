@@ -14,3 +14,7 @@ service:
 # slurm 默认Qos设置
 slurm:
   defaultqos: normal
+
+# module profile文件路径
+modulepath:
+  path: /lustre/software/module/5.2.0/init/profile.sh

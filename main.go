@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"fmt"
 	"math"
@@ -2440,6 +2441,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	var (
 		scriptString = "#!/bin/bash\n"
 		name         string
+		homedir      string
 	)
 	// 记录日志
 	logger.Infof("Received request SubmitJob: %v", in)
@@ -2465,6 +2467,10 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
+	modulepath := configValue.Modulepath.Path
+
+	// utils.ExecuteShellCommand("export PATH='/lustre/software/module/5.2.0/bin':$PATH")
 	// 拼接提交作业的batch脚本
 	scriptString += "#SBATCH " + "-A " + in.Account + "\n"
 	scriptString += "#SBATCH " + "--partition=" + in.Partition + "\n"
@@ -2477,16 +2483,28 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	if in.TimeLimitMinutes != nil {
 		scriptString += "#SBATCH " + "--time=" + strconv.Itoa(int(*in.TimeLimitMinutes)) + "\n"
 	}
-	scriptString += "#SBATCH " + "--chdir=" + in.WorkingDirectory + "\n"
+
+	isAbsolute := filepath.IsAbs(in.WorkingDirectory)
+	if !isAbsolute {
+		homedirTemp, _ := utils.GetUserHomedir(in.UserId)
+		homedir = homedirTemp + "/" + in.WorkingDirectory
+	} else {
+		homedir = in.WorkingDirectory
+	}
+
+	// scriptString += "#SBATCH " + "--chdir=" + in.WorkingDirectory + "\n"
+	scriptString += "#SBATCH " + "--chdir=" + homedir + "\n"
+
 	if in.Stdout != nil {
 		scriptString += "#SBATCH " + "--output=" + *in.Stdout + "\n"
 	}
 	if in.Stderr != nil {
 		scriptString += "#SBATCH " + "--error=" + *in.Stderr + "\n"
 	}
-	if in.MemoryMb != nil {
-		scriptString += "#SBATCH " + "--mem=" + strconv.Itoa(int(*in.MemoryMb)) + "MB" + "\n"
-	}
+	// 强行删除
+	// if in.MemoryMb != nil {
+	// 	scriptString += "#SBATCH " + "--mem=" + strconv.Itoa(int(*in.MemoryMb)) + "MB" + "\n"
+	// }
 	if in.GpuCount != 0 {
 		scriptString += "#SBATCH " + "--gres=gpu:" + strconv.Itoa(int(in.GpuCount)) + "\n"
 	}
@@ -2497,9 +2515,18 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		}
 	}
 
-	scriptString += "\n"
+	if !isAbsolute { // 提交的是交互式作业
+		modulepathString := fmt.Sprintf("source %s", modulepath) // 改成从配置文件中获取profile文件路径信息
+		scriptString += "\n" + modulepathString + "\n"
+	} else {
+		scriptString += "\n"
+	}
+	// scriptString += "\n" + "source /lustre/software/module/5.2.0/init/profile.sh\n"
+
 	scriptString += in.Script
 	// 提交作业
+
+	logger.Infof("%v", scriptString)
 	submitResponse, err := utils.LocalSubmitJob(scriptString, in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
