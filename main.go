@@ -2027,16 +2027,16 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString, stateIdListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, uidListString, stateIdListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
@@ -2046,16 +2046,16 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, uidListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, uidListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, uidListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, uidListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) == 0 && len(in.Filter.States) != 0 {
@@ -2065,30 +2065,30 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, stateIdListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, stateIdListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, stateIdListString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, stateIdListString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else {
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0) ORDER BY id_job LIMIT ? OFFSET ?", clusterName, accountsString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime, pageLimit, pageSize}
-					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString)
+					jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE account IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString)
 					totalParams = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			}
@@ -2121,12 +2121,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, uidListString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, uidListString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) != 0 && len(in.Filter.States) == 0 {
@@ -2136,12 +2136,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				uidListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(uidList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, uidListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, uidListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, uidListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND id_user IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, uidListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else if len(in.Filter.Users) == 0 && len(in.Filter.States) != 0 {
@@ -2151,22 +2151,22 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				stateIdListString := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(stateIdList)), ","), "[]")
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString, stateIdListString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND state IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString, stateIdListString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			} else {
 				if len(in.Filter.Accounts) == 0 {
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				} else {
 					accounts = in.Filter.Accounts
 					accountsString := "'" + strings.Join(accounts, "','") + "'"
-					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end > ? OR ? = 0) AND (time_end < ? OR ? = 0) AND (time_submit > ? OR ? = 0) AND (time_submit < ? OR ? = 0)", clusterName, accountsString)
+					jobSqlConfig = fmt.Sprintf("SELECT account,id_user,cpus_req,job_name,id_job,id_qos,mem_req,nodelist,nodes_alloc,`partition`,state,timelimit,time_submit,time_start,time_end,time_suspended,gres_used,work_dir,tres_alloc,tres_req FROM %s_job_table WHERE account IN (%s) AND (time_end >= ? OR ? = 0) AND (time_end <= ? OR ? = 0) AND (time_submit >= ? OR ? = 0) AND (time_submit <= ? OR ? = 0)", clusterName, accountsString)
 					params = []interface{}{startTimeFilter, startTimeFilter, endTimeFilter, endTimeFilter, submitStartTime, submitStartTime, submitEndTime, submitEndTime}
 				}
 			}
@@ -2468,7 +2468,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		return nil, st.Err()
 	}
 
-	modulepath := configValue.Modulepath.Path
+	modulepath := configValue.Modulepath.Path // 获取module配置文件路径
 
 	// utils.ExecuteShellCommand("export PATH='/lustre/software/module/5.2.0/bin':$PATH")
 	// 拼接提交作业的batch脚本
@@ -2526,7 +2526,6 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	scriptString += in.Script
 	// 提交作业
 
-	logger.Infof("%v", scriptString)
 	submitResponse, err := utils.LocalSubmitJob(scriptString, in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
