@@ -12,3 +12,5 @@ make protos
 make build
 
 ```
+
+**项目部署文档地址**：[deploy 文档](https://github.com/PKUHPC/scow-slurm-adapter/blob/master/docs/deploy.md)
