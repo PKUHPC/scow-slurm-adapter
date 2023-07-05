@@ -67,7 +67,7 @@ buf.gen.yaml  config  docs gen  go.mod  go.sum  main.go  Makefile  README.md  sc
 ```
 
 
-## **3 配置、部署Slurm适配器（将服务器上生成的二进制文件拷贝至 Slurm管理节点）**
+## **3 配置、部署Slurm适配器（将服务器上生成的二进制文件和代码目录中的config目录拷贝至Slurm管理节点）**
 ### **4.1 将服务器上生成的执行程序和代码目录中的config目录拷贝至slurm管理节点的部署目录中**
 ```bash
 # 将服务器或虚拟机上生成的二进制文件和修改好的config目录拷贝至需要部署适配器的slurm管理节点上
