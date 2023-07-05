@@ -32,9 +32,8 @@ go env -w GO111MODULE=on
 
 ### **1.3 在准备好的服务器或虚拟机上安装buf**
 ```bash
-GO111MODULE=on
-GOBIN=/usr/local/bin
-go install github.com/bufbuild/buf/cmd/buf@v1.19.0
+# 执行下面命令完成安装
+GO111MODULE=on GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.23.1
 ```
 
 ## **2 如何编译Slurm适配器项目**
@@ -71,7 +70,7 @@ buf.gen.yaml  config  docs gen  go.mod  go.sum  main.go  Makefile  README.md  sc
 ### **4.1 将服务器上生成的执行程序和代码目录中的config目录拷贝至slurm管理节点的部署目录中**
 ```bash
 # 将服务器或虚拟机上生成的二进制文件和修改好的config目录拷贝至需要部署适配器的slurm管理节点上
-scp -rf scow-slurm-adapter-amd64 config  slurm_mn:/adapter     
+scp -r scow-slurm-adapter-amd64 config  slurm_mn:/adapter     
 # slurm_mn 为需要部署适配器的slurm管理节点、/adapter目录为部署目录
 ```
 
