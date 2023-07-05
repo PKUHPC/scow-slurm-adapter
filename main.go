@@ -2290,7 +2290,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 		}
 		// 低版本slurm mem_req 默认值转换为0
-		if memReq == 9223372036854777728 {
+		if memReq == 9223372036854777728 || memReq == 9223372036854779808 {
 			memReq = 0
 		}
 		if len(fields) == 0 {
