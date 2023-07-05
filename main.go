@@ -1867,6 +1867,9 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
 		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
 		runningJobInfoList := strings.Split(runningjobInfo, ",")
+		if len(runningJobInfoList) == 0 {
+			return &pb.GetJobsResponse{Jobs: jobInfo}, nil
+		}
 		for _, v := range runningJobInfoList {
 			var singerJobJobNodesAlloc int32
 			var singerJobJobReason string
