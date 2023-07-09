@@ -3,6 +3,7 @@
 
 ## **1 Slurm适配器生成二进制文件（直接下载、自己编译两种方式）**
 
+
 ### **1.1 直接从代码release版本下载二进制文件(直接下载而进行文件)** 
 ```bash
 # 直接从项目目录中下载relase版本的二进制文件
@@ -109,11 +110,24 @@ modulepath:
 ### **2.3 启动slurm适配器**
 ```bash
 # 在slurm管理节点上启动服务
-[root@slurm_mn]# cd /adapter && nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &
+[root@slurm_mn]# cd /adapter && nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &     # 适配器启动后会在部署目录生成一个server.log的日志文件
 ```
 
-## **3 更新Slurm适配器**
-### **3.1 下载最新版的Slurm适配器二进制文件**
+
+## **运维Slurm适配器**
+### **3.1 查看Slurm适配器进程**
+```bash
+ps -ef | grep [s]cow-slurm-adapter-amd64  # 如果有输出则Slurm适配器进程存活、无输出则Slurm适配器终止
+```
+
+### **3.2 查看日志信息**
+```bash
+# 在部署目录中查看server.log文件,分析日志信息
+less /adapter/server.log
+```
+
+## **4 更新Slurm适配器**
+### **4.1 下载最新版的Slurm适配器二进制文件**
 * 在slurm管理节点上停止Slurm适配器的运行
   ```bash
   ps -ef | grep [s]cow-slurm-adapter-amd64 | awk '{print $2}' | xargs kill -9
@@ -125,7 +139,7 @@ modulepath:
     nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &
     ```
 
-### **3.2 更新代码自己编译生成最新的Slurm适配器二进制文件**
+### **4.2 更新代码自己编译生成最新的Slurm适配器二进制文件**
 * 更新代码
   ```bash
   # 在2.1节中Slurm适配器代码目录中执行git pull 拉取最新代码
