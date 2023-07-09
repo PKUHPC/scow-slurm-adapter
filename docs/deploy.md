@@ -2,6 +2,13 @@
 
 
 ## **1 Slurm适配器生成二进制文件（直接下载、自己编译两种方式）**
+### **1.1 直接下载release Slurm适配器二进制文件**
+#### **1.1.1 在Slurm适配器项目地址(https://github.com/PKUHPC/scow-slurm-adapter)中点击tag标签** 
+![Alt text](image.png)
+#### **1.1.2 选择最新版本tag**
+![Alt text](image-1.png)
+#### **1.1.3 下载二进制文件（根据处理器下载对应二进制文件）**
+![Alt text](image-2.png)
 
 
 ### **1.1 直接从代码release版本下载二进制文件(直接下载而进行文件)** 
