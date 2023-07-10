@@ -5,17 +5,11 @@
 ### **1.1 直接下载release Slurm适配器二进制文件**
 #### **1.1.1 在Slurm适配器项目地址(https://github.com/PKUHPC/scow-slurm-adapter)中点击tag标签** 
 ![Alt text](image.png)
-#### **1.1.2 选择最新版本tag**
+#### **1.1.2 选择最新版本tag，点击进入二进制文件下载页面**
 ![Alt text](image-1.png)
-#### **1.1.3 下载二进制文件（根据处理器下载对应二进制文件）**
+#### **1.1.3 下载二进制文件（根据处理器架构下载对应二进制文件）**
 ![Alt text](image-2.png)
 
-
-### **1.1 直接从代码release版本下载二进制文件(直接下载而进行文件)** 
-```bash
-# 直接从项目目录中下载relase版本的二进制文件
-
-```
 
 ### **1.2 下载代码编译生成二进制文件(自己编译生成二进制文件)**
 #### **1.2.1 准备一台能连网的服务器或者虚拟机，在准备的服务器或虚拟机上安装go语言、配置go相关环境变量**
@@ -81,8 +75,8 @@ buf.gen.yaml  config  docs gen  go.mod  go.sum  main.go  Makefile  README.md  sc
 ## **2 配置、部署Slurm适配器**
 ### **2.1 将服务器上生成的可执行程序或者直接下载的二进制文件以及代码目录中的config目录拷贝至slurm管理节点的部署目录中**
 ```bash
-# 将服务器或虚拟机上生成的二进制文件和修改好的config目录拷贝至需要部署适配器的slurm管理节点上
-[root@manage01 scow-slurm-adapter]# scp -r scow-slurm-adapter-amd64 config  slurm_mn:/adapter     
+# 将自己编译生成的二进制文件或者直接下载的二进制文件以及代码目录中config目录拷贝至需要部署适配器的slurm管理节点上的部署目录中
+scp -r scow-slurm-adapter-amd64 config  slurm_mn:/adapter     
 # slurm_mn 为需要部署适配器的slurm管理节点、/adapter目录slurm管理节点的部署目录
 ```
 
@@ -116,6 +110,9 @@ modulepath:
 
 ### **2.3 启动slurm适配器**
 ```bash
+# slurm适配器二进制文件和config目录需在同一目录（部署目录）下
+[root@slurm_mn]# ls /adapter
+config scow-slurm-adapter-amd4
 # 在slurm管理节点上启动服务
 [root@slurm_mn]# cd /adapter && nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &     # 适配器启动后会在部署目录生成一个server.log的日志文件
 ```
@@ -136,12 +133,13 @@ less /adapter/server.log
 
 ## **4 更新Slurm适配器**
 ### **4.1 下载最新版的Slurm适配器二进制文件**
+* 在slurm适配器github项目地址中下载最新的二进制文件（参考本文档1.1节的内容）
+* 将下载的最新的二进制文件拷贝值需部署适配器的slurm管理节点
 * 在slurm管理节点上停止Slurm适配器的运行
   ```bash
   ps -ef | grep [s]cow-slurm-adapter-amd64 | awk '{print $2}' | xargs kill -9
   ```
-* 在slurm适配器github项目地址中下载最新的二进制文件
-* 修改config/config.yaml文件（详细参考2.2节信息）（config目录需和Slurm适配器二进制文件放在同一个目录下）
+* 在slurm管理节点的部署目录中修改config/config.yaml文件（详细参考2.2节信息）（config目录需和Slurm适配器二进制文件放在同一个目录下）
 * 在Slurm管理节点上启动最新的Slurm适配器
     ```bash
     nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &
