@@ -7,7 +7,7 @@ run:
 	go run *.go 
 
 build:
-	CGO_BUILD=0 GOARCH=${ARCH} go build -o scow-slurm-adapter-${ARCH}
+	CGO_BUILD=0 GOARCH=${ARCH} CGO_ENABLED=0 go build -o scow-slurm-adapter-${ARCH}
 
 test:
 	go test

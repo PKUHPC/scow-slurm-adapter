@@ -114,6 +114,11 @@ modulepath:
 # slurm适配器二进制文件和config目录需在同一目录（部署目录）下
 [root@slurm_mn]# ls /adapter
 config scow-slurm-adapter-amd4
+
+# 给二进制添加执行权限
+# 在slurm管理节点上启动服务
+[root@slurm_mn]# chmod +x /adapter/scow-slurm-adapter-amd64
+
 # 在slurm管理节点上启动服务
 [root@slurm_mn]# cd /adapter && nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &     # 适配器启动后会在部署目录生成一个server.log的日志文件
 ```
@@ -123,7 +128,7 @@ config scow-slurm-adapter-amd4
 ### **3.1 查看Slurm适配器进程**
 ```bash
 # 在Slurm适配器部署服务器上运行下面命令
-ps -ef | grep [s]cow-slurm-adapter-amd64  # 如果有输出则Slurm适配器进程存活、无输出则Slurm适配器终止
+ps aux | grep [s]cow-slurm-adapter-amd64  # 如果有输出则Slurm适配器进程存活、无输出则Slurm适配器终止
 ```
 
 ### **3.2 查看日志信息**
