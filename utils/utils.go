@@ -21,12 +21,13 @@ import (
 )
 
 type MySQLConfig struct {
-	Host        string `yaml:"host"`
-	Port        int    `yaml:"port"`
-	User        string `yaml:"user"`
-	DBName      string `yaml:"dbname"`
-	Password    string `yaml:"password"`
-	ClusterName string `yaml:"clustername"`
+	Host           string `yaml:"host"`
+	Port           int    `yaml:"port"`
+	User           string `yaml:"user"`
+	DBName         string `yaml:"dbname"`
+	Password       string `yaml:"password"`
+	ClusterName    string `yaml:"clustername"`
+	DatabaseEncode string `yaml:"databaseencode"`
 }
 
 type Service struct {
@@ -104,8 +105,10 @@ func DatabaseConfig() string {
 	passWord := config.MySQLConfig.Password
 	dbName := config.MySQLConfig.DBName
 	port := config.MySQLConfig.Port
+	databaseencode := config.MySQLConfig.DatabaseEncode
 
-	dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, "latin1")
+	// dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, "latin1")
+	dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, databaseencode)
 	return dbConfig
 }
 

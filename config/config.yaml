@@ -6,6 +6,7 @@ mysql:
   dbname: slurm_acct_db
   password: 81SLURM@@rabGTjN7
   clustername: cluster
+  databaseencode: latin1
 
 # 服务端口设置
 service:
@@ -18,3 +19,4 @@ slurm:
 # module profile文件路径
 modulepath:
   path: /lustre/software/module/5.2.0/init/profile.sh
+  

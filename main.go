@@ -417,6 +417,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	st := status.New(codes.Internal, "Shell command execute falied!")
 	st, _ = st.WithDetails(errInfo)
 	return nil, st.Err()
+
 }
 
 func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUserInAccountRequest) (*pb.UnblockUserInAccountResponse, error) {
@@ -1112,13 +1113,23 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
 				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
-				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
-				memOutput, _ := utils.RunCommand(getMemCmd)
+				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
+				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeName)
+				memOutput, err := utils.RunCommand(getMemCmd)
+
+				if err != nil {
+
+				}
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			} else {
-				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
-				memOutput, _ := utils.RunCommand(getMemCmd)
+				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem=| awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
+				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
+				memOutput, err := utils.RunCommand(getMemCmd)
+
+				if err != nil {
+
+				}
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			}
@@ -2290,7 +2301,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 		}
 		// 低版本slurm mem_req 默认值转换为0
-		if memReq == 9223372036854777728 || memReq == 9223372036854779808  || memReq > 9000000000000000000 {
+		if memReq == 9223372036854777728 || memReq == 9223372036854779808 || memReq > 9000000000000000000 {
 			memReq = 0
 		}
 		if len(fields) == 0 {
