@@ -1875,7 +1875,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 	if setBool && len(filterStates) != 0 && len(submitUser) != 0 {
 		getJobInfoCmdLine := fmt.Sprintf("squeue -u %s --noheader", strings.Join(submitUser, ","))
-		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
+		// getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
+		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
 		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
 		runningJobInfoList := strings.Split(runningjobInfo, ",")
 		if len(runningJobInfoList) == 0 {
@@ -1888,18 +1889,19 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var singerJobElapsedSeconds int64
 			var singerJobInfoNodeList string
 			var timeSubmit int64
+			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
 			if len(v) != 0 {
 				singerJobInfo := strings.Split(v, " ")
-				singerJobAccount := singerJobInfo[0]
-				singerJobUserName := singerJobInfo[12]
-				singerJobJobId, _ := strconv.Atoi(singerJobInfo[1])
-				singerJobState := singerJobInfo[11]
-				singerJobJobPartition := singerJobInfo[8]
-				singerJobJobName := singerJobInfo[4]
-				singerJobQos := singerJobInfo[9]
-				singerJobWorkingDirectory := singerJobInfo[14]
-				singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[5])
+				singerJobAccount := singerJobInfo[1]
+				singerJobUserName := singerJobInfo[13]
+				singerJobJobId, _ := strconv.Atoi(singerJobInfo[2])
+				singerJobState := singerJobInfo[12]
+				singerJobJobPartition := singerJobInfo[9]
+				singerJobJobName := singerJobInfo[5]
+				singerJobQos := singerJobInfo[10]
+				singerJobWorkingDirectory := singerJobInfo[15]
+				singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
 				submittimeSqlConfig := fmt.Sprintf("SELECT time_submit FROM %s_job_table WHERE id_job = ?", clusterName)
 				db.QueryRow(submittimeSqlConfig, singerJobJobId).Scan(&timeSubmit)
 				if timeSubmit == 0 {
@@ -1917,14 +1919,24 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					singerJobElapsedSeconds = 0
 					singerJobInfoNodeList = "None assigned"
 				} else {
-					singerJobJobNodesAllocTemp, _ := strconv.Atoi(singerJobInfo[3])
+					singerJobJobNodesAllocTemp, _ := strconv.Atoi(singerJobInfo[4])
 					singerJobJobNodesAlloc = int32(singerJobJobNodesAllocTemp)
-					singerJobJobReason = singerJobInfo[11]
-					singerJobCpusAllocTemp, _ := strconv.Atoi(singerJobInfo[2])
+					singerJobJobReason = singerJobInfo[12]
+					singerJobCpusAllocTemp, _ := strconv.Atoi(singerJobInfo[3])
 					singerJobCpusAlloc = int32(singerJobCpusAllocTemp)
-					singerJobElapsedSeconds = utils.GetRunningElapsedSeconds(singerJobInfo[7])
-					singerJobInfoNodeList = singerJobInfo[15]
+					singerJobElapsedSeconds = utils.GetRunningElapsedSeconds(singerJobInfo[8])
+					singerJobInfoNodeList = singerJobInfo[16]
 				}
+
+				// 新加代码，在正在运行中的作业添加gpu分配逻辑
+				if singerJobInfo[0] == "N/A" {
+					singerJobGpusAlloc = 0
+				} else {
+					perNodeGresAlloc := strings.Split(singerJobInfo[0], ":")
+					perNodeGpusNum, _ := strconv.Atoi(perNodeGresAlloc[2])
+					singerJobGpusAlloc = int32(perNodeGpusNum) * singerJobJobNodesAlloc
+				}
+
 				jobInfo = append(jobInfo, &pb.JobInfo{
 					JobId:            uint32(singerJobJobId),
 					Name:             singerJobJobName,
@@ -1941,6 +1953,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					ElapsedSeconds:   &singerJobElapsedSeconds,
 					NodeList:         &singerJobInfoNodeList,
 					SubmitTime:       singerJobTimeSubmit,
+					GpusAlloc:        &singerJobGpusAlloc,
 				})
 			}
 		}
@@ -2301,7 +2314,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 		}
 		// 低版本slurm mem_req 默认值转换为0
-		if memReq == 9223372036854777728 || memReq == 9223372036854779808 || memReq > 9000000000000000000 {
+		if memReq > 4000000000 {
 			memReq = 0
 		}
 		if len(fields) == 0 {

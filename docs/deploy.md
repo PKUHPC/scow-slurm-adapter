@@ -93,7 +93,7 @@ mysql:
   dbname: slurm_acct_db                                   # 指定slurm数据库的库名
   password: 81SLURM@@rabGTjN7                             # 访问slurmdbd节点数据库的密码
   clustername: cluster                                    # 指定slurm集群的名字
-  databaseencode: latin1                                  # 指定slurm数据库编码
+  databaseencode: latin1                                  # 指定数据库客户端编码
 
 # 服务端口设置
 service:
