@@ -20,12 +20,12 @@ func TestGetAvailablePartitions(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.GetAvailablePartitionsRequest{
-		AccountName: "zsddd",
+		AccountName: "a_admin987",
 		UserId:      "test02",
 	}
 	res, err := client.GetAvailablePartitions(context.Background(), req)
 	if err != nil {
-		t.Fatalf("GetClusterConfig failed: %v", err)
+		t.Fatalf("GetAvailablePartitions failed: %v", err)
 	}
 
 	// Check the result

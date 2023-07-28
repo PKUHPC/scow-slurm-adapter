@@ -190,6 +190,33 @@ func GetStateId(stateString string) int {
 	return state
 }
 
+func GetTimeLimit(timeLimit string) int64 {
+	var timeLimitMinutes int64
+	if strings.Contains(timeLimit, "-") {
+		timeLimitMinutesList := strings.Split(timeLimit, "-")
+		day, _ := strconv.Atoi(timeLimitMinutesList[0])
+		timeLimitMinutesListNew := strings.Split(timeLimitMinutesList[1], ":")
+		hours, _ := strconv.Atoi(timeLimitMinutesListNew[0])
+		minutes, _ := strconv.Atoi(timeLimitMinutesListNew[1])
+		seconds, _ := strconv.Atoi(timeLimitMinutesListNew[2])
+		return int64(seconds)*0 + int64(minutes)*1 + int64(hours)*60 + int64(day)*24*60
+	} else {
+		// 没有timeLimitMinutes超过一天的作业
+		timeLimitMinutesList := strings.Split(timeLimit, ":")
+		if len(timeLimitMinutesList) == 2 {
+			minutes, _ := strconv.Atoi(timeLimitMinutesList[0])
+			seconds, _ := strconv.Atoi(timeLimitMinutesList[1])
+			timeLimitMinutes = int64(seconds)*0 + int64(minutes)*1
+		} else {
+			hours, _ := strconv.Atoi(timeLimitMinutesList[0])
+			minutes, _ := strconv.Atoi(timeLimitMinutesList[1])
+			seconds, _ := strconv.Atoi(timeLimitMinutesList[2])
+			timeLimitMinutes = int64(seconds)*0 + int64(minutes)*1 + int64(hours)*60
+		}
+		return timeLimitMinutes
+	}
+}
+
 func GetElapsedSeconds(cmd string) int64 {
 	var elapsedSeconds int64
 	ElapsedSecondsOutput, _ := RunCommand(cmd)

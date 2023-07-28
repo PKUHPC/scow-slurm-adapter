@@ -1901,7 +1901,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				singerJobJobName := singerJobInfo[5]
 				singerJobQos := singerJobInfo[10]
 				singerJobWorkingDirectory := singerJobInfo[15]
-				singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
+				// singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
+				singerJobtimeLimitMinutes := utils.GetTimeLimit(singerJobInfo[6])
 				submittimeSqlConfig := fmt.Sprintf("SELECT time_submit FROM %s_job_table WHERE id_job = ?", clusterName)
 				db.QueryRow(submittimeSqlConfig, singerJobJobId).Scan(&timeSubmit)
 				if timeSubmit == 0 {
@@ -1945,7 +1946,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					Partition:        singerJobJobPartition,
 					Qos:              singerJobQos,
 					State:            singerJobState,
-					TimeLimitMinutes: int64(singerJobtimeLimitMinutes),
+					TimeLimitMinutes: singerJobtimeLimitMinutes,
 					WorkingDirectory: singerJobWorkingDirectory,
 					Reason:           &singerJobJobReason,
 					CpusAlloc:        &singerJobCpusAlloc,
