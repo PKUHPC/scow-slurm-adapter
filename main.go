@@ -1301,7 +1301,10 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			qos       []string
 		)
 		getPartitionAllowAccountsCmd := fmt.Sprintf("scontrol show part=%s | grep -i AllowAccounts | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
-		accouts, _ := utils.RunCommand(getPartitionAllowAccountsCmd)
+		accouts, _ := utils.RunCommand(getPartitionAllowAccountsCmd) // 这个地方需要改一下，变成数组进行判断
+		// log.Println(len(strings.Split(accouts, ",")))                // 测试
+		// arrays.Contains(strings.Split(accouts, ","), in.AccountName)
+		// strings.Contains(accouts, in.AccountName)
 		if accouts == "ALL" || strings.Contains(accouts, in.AccountName) {
 			// 包含account
 			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
@@ -1411,6 +1414,7 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			continue
 		}
 	}
+	log.Println(parts, 123456)
 	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
