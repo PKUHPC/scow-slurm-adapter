@@ -1303,9 +1303,9 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		getPartitionAllowAccountsCmd := fmt.Sprintf("scontrol show part=%s | grep -i AllowAccounts | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
 		accouts, _ := utils.RunCommand(getPartitionAllowAccountsCmd) // 这个地方需要改一下，变成数组进行判断
 		// log.Println(len(strings.Split(accouts, ",")))                // 测试
-		// arrays.Contains(strings.Split(accouts, ","), in.AccountName)
+		index := arrays.Contains(strings.Split(accouts, ","), in.AccountName)
 		// strings.Contains(accouts, in.AccountName)
-		if accouts == "ALL" || strings.Contains(accouts, in.AccountName) {
+		if accouts == "ALL" || index != -1 {
 			// 包含account
 			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
 			output, err := utils.RunCommand(getPartitionInfoCmd)
@@ -1570,8 +1570,10 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	clusterName := configValue.MySQLConfig.ClusterName
 	// 根据jobid查询作业详细信息
-	jobSqlConfig := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_job = ?", clusterName)
-	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
+	jobSqlConfig := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_job = ?", clusterName)
+
+	// jobSqlConfig := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE id_job = ?", clusterName)
+	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "JOB_NOT_FOUND",

@@ -20,8 +20,8 @@ func TestGetAvailablePartitions(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.GetAvailablePartitionsRequest{
-		AccountName: "zlb",
-		UserId:      "test06",
+		AccountName: "a_admin820",
+		UserId:      "test02",
 	}
 	res, err := client.GetAvailablePartitions(context.Background(), req)
 	if err != nil {
