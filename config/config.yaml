@@ -10,7 +10,7 @@ mysql:
 
 # 服务端口设置
 service:
-  port: 8999
+  port: 8972
 
 # slurm 默认Qos设置
 slurm:
