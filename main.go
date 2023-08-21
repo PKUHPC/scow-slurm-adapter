@@ -1940,7 +1940,11 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					singerJobGpusAlloc = 0
 				} else {
 					perNodeGresAlloc := strings.Split(singerJobInfo[0], ":")
-					perNodeGpusNum, _ := strconv.Atoi(perNodeGresAlloc[2])
+					// 求长度
+					lastIndex := len(perNodeGresAlloc) - 1
+					lastElement := perNodeGresAlloc[lastIndex]
+					perNodeGpusNum, _ := strconv.Atoi(lastElement)
+					// perNodeGpusNum, _ := strconv.Atoi(perNodeGresAlloc[2])
 					singerJobGpusAlloc = int32(perNodeGpusNum) * singerJobJobNodesAlloc
 				}
 
