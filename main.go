@@ -1115,21 +1115,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
 				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeName)
-				memOutput, err := utils.RunCommand(getMemCmd)
+				memOutput, _ := utils.RunCommand(getMemCmd)
 
-				if err != nil {
-
-				}
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			} else {
 				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem=| awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
-				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
-				memOutput, err := utils.RunCommand(getMemCmd)
+				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
+				memOutput, _ := utils.RunCommand(getMemCmd)
 
-				if err != nil {
-
-				}
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			}
@@ -1309,6 +1303,12 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			// 包含account
 			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
 			output, err := utils.RunCommand(getPartitionInfoCmd)
+			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
+			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			totalCpuInt, _ = strconv.Atoi(totalCpus)
+			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
+			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 			if err == nil {
 				configArray := strings.Split(output, ",")
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
@@ -1335,24 +1335,24 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
 					nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 					nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
-					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
+					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
 					memOutput, _ := utils.RunCommand(getMemCmd)
 					nodeMem, _ := strconv.Atoi(memOutput)
 					totalMemInt = nodeMem * totalNodeNumInt
 				} else {
-					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
+					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
 					memOutput, _ := utils.RunCommand(getMemCmd)
 					nodeMem, _ := strconv.Atoi(memOutput)
 					totalMemInt = nodeMem * totalNodeNumInt
 				}
 			}
 			// 获取总cpu、总节点数
-			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
-			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
-			totalCpuInt, _ = strconv.Atoi(totalCpus)
-			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
-			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
-			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
+			// getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
+			// totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			// totalCpuInt, _ = strconv.Atoi(totalCpus)
+			// getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
+			// totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			// totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 
 			// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 			getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
@@ -1414,7 +1414,6 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			continue
 		}
 	}
-	log.Println(parts, 123456)
 	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
