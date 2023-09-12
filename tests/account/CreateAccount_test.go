@@ -12,7 +12,7 @@ import (
 func TestCreateAccount(t *testing.T) {
 
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}
@@ -21,8 +21,8 @@ func TestCreateAccount(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.CreateAccountRequest{
-		AccountName: "Ssddd",
-		OwnerUserId: "test07",
+		AccountName: "this11",
+		OwnerUserId: "test16",
 	}
 	_, err = client.CreateAccount(context.Background(), req)
 	if err != nil {

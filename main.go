@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -91,7 +92,8 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -139,25 +141,54 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 
 	if err != nil {
+		// 0907 注释
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
+
+		// var wg sync.WaitGroup
+		// for _, p := range partitions {
+		// 	wg.Add(1)
+		// 	go func(partition string) {
+		// 		defer wg.Done()
+		// 		createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, partition, in.AccountName)
+		// 		utils.ExecuteShellCommand(createUserCmd)
+		// 	}(p)
+		// }
+		// // 等待所有任务完成
+		// wg.Wait()
+
 		return &pb.AddUserToAccountResponse{}, nil
 	}
+
 	// 检查账户和用户之间是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
 
 	if err != nil {
+		// 0907 注释
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
+
+		// var wg sync.WaitGroup
+		// for _, p := range partitions {
+		// 	wg.Add(1)
+		// 	go func(partition string) {
+		// 		defer wg.Done()
+		// 		createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, partition, in.AccountName)
+		// 		utils.ExecuteShellCommand(createUserCmd)
+		// 	}(p)
+		// }
+		// // 等待所有任务完成
+		// wg.Wait()
+
 		return &pb.AddUserToAccountResponse{}, nil
 	}
 	// 关联已经存在的情况
@@ -203,7 +234,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -214,10 +246,12 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
 	// 检查账户和用户之间是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
@@ -225,7 +259,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -270,7 +305,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -314,7 +350,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "RUNNING_JOB_EXISTS",
 			}
-			st := status.New(codes.Internal, "This user have running jobs!")
+			message := fmt.Sprintf("The %s have running jobs!", in.UserId)
+			st := status.New(codes.Internal, message)
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -338,7 +375,8 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "RUNNING_JOB_EXISTS",
 		}
-		st := status.New(codes.Internal, "This user have running jobs!")
+		message := fmt.Sprintf("The %s have running jobs!", in.UserId)
+		st := status.New(codes.Internal, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -378,7 +416,8 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -389,7 +428,8 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -401,7 +441,8 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -417,7 +458,6 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	st := status.New(codes.Internal, "Shell command execute falied!")
 	st, _ = st.WithDetails(errInfo)
 	return nil, st.Err()
-
 }
 
 func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUserInAccountRequest) (*pb.UnblockUserInAccountResponse, error) {
@@ -449,7 +489,8 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		mesaage := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, mesaage)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -460,10 +501,12 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
 	// 检查账户与用户是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
@@ -471,7 +514,8 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -524,7 +568,8 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -535,10 +580,12 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
 	// 检查账户与用户在slurm中是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
@@ -546,7 +593,8 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -588,7 +636,8 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -697,12 +746,26 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
+		// 新加
+		// var wg sync.WaitGroup
+		// for _, p := range partitions {
+		// 	wg.Add(1)
+		// 	go func(partition string) {
+		// 		defer wg.Done()
+		// 		createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, partition, in.AccountName)
+		// 		utils.ExecuteShellCommand(createUserCmd)
+		// 	}(p)
+		// }
+		// // 等待所有任务完成
+		// wg.Wait()
 		return &pb.CreateAccountResponse{}, nil
 	}
+
 	errInfo := &errdetails.ErrorInfo{
 		Reason: "ACCOUNT_ALREADY_EXISTS",
 	}
-	st := status.New(codes.AlreadyExists, "The account is already exists.")
+	message := fmt.Sprintf("The %s is already exists.", in.AccountName)
+	st := status.New(codes.AlreadyExists, message)
 	st, _ = st.WithDetails(errInfo)
 	return nil, st.Err()
 }
@@ -734,7 +797,8 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -822,7 +886,8 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -990,7 +1055,8 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1224,7 +1290,8 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "Account does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1236,10 +1303,12 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
 	// 检查账户和用户之间是否存在关联关系
 	assocSqlConfig := fmt.Sprintf("SELECT DISTINCT user FROM %s_assoc_table WHERE user = ? AND acct = ? AND deleted = 0", clusterName)
 	err = db.QueryRow(assocSqlConfig, in.UserId, in.AccountName).Scan(&user)
@@ -1247,7 +1316,8 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_ACCOUNT_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "User and account assocation is not exists!")
+		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1444,7 +1514,8 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1480,7 +1551,7 @@ func (s *serverJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 通过jobId来查找作业信息
-	jobSqlConfig := fmt.Sprintf("SELECT timelimit FROM %s_job_table WHERE id_job = ?", clusterName)
+	jobSqlConfig := fmt.Sprintf("SELECT timelimit FROM %s_job_table WHERE id_job = ? AND state IN (0, 1, 2)", clusterName)
 	err := db.QueryRow(jobSqlConfig, in.JobId).Scan(&timeLimit)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -1896,7 +1967,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var timeSubmit int64
 			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
-			if len(v) != 0 {
+			if len(v) != 0 && len(strings.Split(v, " ")) >= 15 {
 				singerJobInfo := strings.Split(v, " ")
 				singerJobAccount := singerJobInfo[1]
 				singerJobUserName := singerJobInfo[13]
@@ -1917,7 +1988,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				if singerJobState == "PENDING" {
 					singerJobJobNodesAlloc = 0
-					// singerJobJobReason = singerJobInfo[17] //
+					// singerJobJobReason = singerJobInfo[17]
 					if _, ok := pendingUserMap[singerJobJobId]; ok {
 						singerJobJobReason = pendingUserMap[singerJobJobId]
 					}
@@ -1965,7 +2036,13 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					SubmitTime:       singerJobTimeSubmit,
 					GpusAlloc:        &singerJobGpusAlloc,
 				})
+			} else {
+				continue
 			}
+		}
+		// 返回
+		if len(jobInfo) == 0 {
+			return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 		}
 
 		if in.Sort != nil && len(jobInfo) != 0 {
@@ -2500,7 +2577,8 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "USER_NOT_FOUND",
 		}
-		st := status.New(codes.NotFound, "The user does not exists.")
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -2597,12 +2675,22 @@ func main() {
 	// 设置日志级别为Info
 	logger.SetLevel(logrus.InfoLevel)
 	// 设置日志输出到控制台和文件中
-	file, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal(err)
+	// file, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer file.Close()
+	// 创建一个 lumberjack.Logger，用于日志轮转配置
+	logFile := &lumberjack.Logger{
+		Filename:   "server.log", // 日志文件路径
+		MaxSize:    10,           // 日志文件的最大大小（以MB为单位）
+		MaxBackups: 3,            // 保留的旧日志文件数量
+		MaxAge:     28,           // 保留的旧日志文件的最大天数
+		LocalTime:  true,         // 使用本地时间戳
+		Compress:   true,         // 是否压缩旧日志文件
 	}
-	defer file.Close()
-	logger.SetOutput(io.MultiWriter(os.Stdout, file))
+	logger.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	defer logFile.Close()
 
 	// 启动服务
 	port := configValue.Service.Port
