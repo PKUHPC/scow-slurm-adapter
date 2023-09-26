@@ -746,18 +746,6 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			utils.ExecuteShellCommand(createUserCmd)
 			utils.ExecuteShellCommand(modifyUserCmd)
 		}
-		// 新加
-		// var wg sync.WaitGroup
-		// for _, p := range partitions {
-		// 	wg.Add(1)
-		// 	go func(partition string) {
-		// 		defer wg.Done()
-		// 		createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, partition, in.AccountName)
-		// 		utils.ExecuteShellCommand(createUserCmd)
-		// 	}(p)
-		// }
-		// // 等待所有任务完成
-		// wg.Wait()
 		return &pb.CreateAccountResponse{}, nil
 	}
 
@@ -1125,10 +1113,13 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 	}
 	for _, partition := range partitions {
 		var (
-			totalGpus uint32
-			comment   string
-			qos       []string
-			totalMems int
+			totalGpus    uint32
+			comment      string
+			qos          []string
+			totalMems    int
+			totalCpus    string
+			totalMemsTmp string
+			totalNodes   string
 		)
 
 		getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
@@ -1136,14 +1127,33 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		// 不同slurm版本的问题
 		if err == nil {
 			configArray := strings.Split(output, ",")
-			totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
-			// totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}' | awk -F'M' '{print $1}'", configArray[1])
-			totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
-			totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
 
-			totalCpus, _ := utils.RunCommand(totalCpusCmd)
-			totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
-			// totalMems1, _ := utils.RunCommand(totalMemsCmd1)
+			if len(configArray) == 4 {
+				totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
+				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
+				totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
+
+				totalCpus, _ = utils.RunCommand(totalCpusCmd)
+				totalMemsTmp, _ = utils.RunCommand(totalMemsCmd)
+				totalNodes, _ = utils.RunCommand(totalNodesCmd)
+			} else if len(configArray) < 4 {
+				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
+				totalCpusCmd := fmt.Sprintf("scontrol show part | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'")
+				totalNodesCmd := fmt.Sprintf("scontrol show part | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'")
+
+				totalCpus, _ = utils.RunCommand(totalCpusCmd)
+				totalMemsTmp, _ = utils.RunCommand(totalMemsCmd)
+				totalNodes, _ = utils.RunCommand(totalNodesCmd)
+			}
+
+			// totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
+			// totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
+			// totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
+
+			// totalCpus, _ := utils.RunCommand(totalCpusCmd)
+			// totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
+			// totalNodes, _ := utils.RunCommand(totalNodesCmd)
+
 			if strings.Contains(totalMemsTmp, "M") {
 				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
 				totalMems = totalMemsInt
@@ -1154,7 +1164,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "T")[0])
 				totalMems = totalMemsInt * 1024 * 1024
 			}
-			totalNodes, _ := utils.RunCommand(totalNodesCmd)
+			// totalNodes, _ := utils.RunCommand(totalNodesCmd)
 
 			// 将字符串转换为int
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
@@ -1967,6 +1977,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var timeSubmit int64
 			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
+			var singerJobtimeLimitMinutes int64
 			if len(v) != 0 && len(strings.Split(v, " ")) >= 15 {
 				singerJobInfo := strings.Split(v, " ")
 				singerJobAccount := singerJobInfo[1]
@@ -1978,7 +1989,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				singerJobQos := singerJobInfo[10]
 				singerJobWorkingDirectory := singerJobInfo[15]
 				// singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
-				singerJobtimeLimitMinutes := utils.GetTimeLimit(singerJobInfo[6])
+				if singerJobInfo[6] == "UNLIMITED" {
+					singerJobtimeLimitMinutes = 0
+				} else {
+					singerJobtimeLimitMinutes = utils.GetTimeLimit(singerJobInfo[6])
+				}
+				// singerJobtimeLimitMinutes := utils.GetTimeLimit(singerJobInfo[6])
 				submittimeSqlConfig := fmt.Sprintf("SELECT time_submit FROM %s_job_table WHERE id_job = ?", clusterName)
 				db.QueryRow(submittimeSqlConfig, singerJobJobId).Scan(&timeSubmit)
 				if timeSubmit == 0 {
