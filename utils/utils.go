@@ -371,6 +371,25 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 	return output.String(), nil
 }
 
+func LocalFileSubmitJob(filePath string, username string) (string, error) {
+	cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch %s'", username, filePath)
+	cmd := exec.Command("bash", "-c", cmdLine)
+	// 创建一个 bytes.Buffer 用于捕获输出
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	// 将脚本作为命令的输入
+
+	// 执行命令
+	err := cmd.Run()
+	if err != nil {
+		return output.String(), err
+	}
+
+	return output.String(), nil
+}
+
 func GetUserHomedir(username string) (string, error) {
 	// 获取指定用户名的用户信息
 	u, err := user.Lookup(username)

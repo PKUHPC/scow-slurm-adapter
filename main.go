@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"io"
@@ -52,8 +53,48 @@ type serverJob struct {
 	pb.UnimplementedJobServiceServer
 }
 
+type serverVersion struct {
+	pb.UnimplementedVersionServiceServer
+}
+
 func init() {
 	configValue = utils.ParseConfig(utils.DefaultConfigPath)
+}
+
+// version
+func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
+	var version string
+	// 记录日志
+	logger.Infof("Received request GetVersion: %v", in)
+	file, _ := os.Open("Makefile")
+	defer file.Close()
+	// 创建一个 bufio 读取器
+	reader := bufio.NewReader(file)
+	// 逐行读取文件内容
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break // 文件读取完毕或出现错误
+		}
+
+		// 在这里对每一行进行解析
+		// 这里只是简单地打印每一行的内容，你可以根据实际需求进行解析处理
+		// fmt.Println("Line:", line)
+		// 匹配字符串
+		tagPresent := strings.Contains(line, "tag=")
+		if tagPresent {
+			version = line[len(line)-6:]
+			break
+		}
+	}
+	if version == "" {
+		return &pb.GetVersionResponse{Major: 1, Minor: 2, Patch: 0}, nil
+	}
+	list := strings.Split(version, ".")
+	major, _ := strconv.Atoi(list[0])
+	minor, _ := strconv.Atoi(list[1])
+	patch, _ := strconv.Atoi(list[2])
+	return &pb.GetVersionResponse{Major: uint32(major), Minor: uint32(minor), Patch: uint32(patch)}, nil
 }
 
 // UserService
@@ -1128,7 +1169,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		if err == nil {
 			configArray := strings.Split(output, ",")
 
-			if len(configArray) == 4 {
+			if len(configArray) >= 4 {
 				totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
 				totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
@@ -2620,7 +2661,9 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		homedirTemp, _ := utils.GetUserHomedir(in.UserId)
 		homedir = homedirTemp + "/" + in.WorkingDirectory
 	} else {
-		homedir = in.WorkingDirectory
+		// homedir = in.WorkingDirectory
+		homedirTemp, _ := utils.GetUserHomedir(in.UserId)
+		homedir = homedirTemp + "/" + in.WorkingDirectory
 	}
 
 	// scriptString += "#SBATCH " + "--chdir=" + in.WorkingDirectory + "\n"
@@ -2670,6 +2713,51 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	jobIdString := responseList[len(responseList)-1]
 	jobId, _ := strconv.Atoi(jobIdString)
 	return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
+}
+
+func (s *serverJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAsJobRequest) (*pb.SubmitScriptAsJobResponse, error) {
+	var (
+		name string
+	)
+	// 记录日志
+	logger.Infof("Received request SubmitFileAsJob: %v", in)
+	resultUser := utils.ContainsUppercase(in.UserId)
+	if resultUser {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_CONTAIN_UPPER_LETTER",
+		}
+		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 检查账户是否在slurm中
+	userSqlConfig := "SELECT name FROM user_table WHERE deleted = 0 AND name = ?"
+	err := db.QueryRow(userSqlConfig, in.UserId).Scan(&name)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 具体的提交逻辑
+	submitResponse, err := utils.LocalSubmitJob(in.Script, in.UserId)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "SBATCH_FAILED",
+		}
+		st := status.New(codes.Unknown, submitResponse)
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	} else {
+		// 这里还要获取jobid
+		responseList := strings.Split(strings.TrimSpace(string(submitResponse)), " ")
+		jobIdString := responseList[len(responseList)-1]
+		jobId, _ := strconv.Atoi(jobIdString)
+		return &pb.SubmitScriptAsJobResponse{JobId: uint32(jobId)}, nil
+	}
 }
 
 func main() {
@@ -2725,6 +2813,7 @@ func main() {
 	pb.RegisterAccountServiceServer(s, &serverAccount{})
 	pb.RegisterConfigServiceServer(s, &serverConfig{})
 	pb.RegisterJobServiceServer(s, &serverJob{})
+	pb.RegisterVersionServiceServer(s, &serverVersion{})
 
 	if err = s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
