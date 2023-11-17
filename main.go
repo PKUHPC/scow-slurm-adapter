@@ -1512,6 +1512,8 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		gpuId     int
 		parts     []*pb.PartitionInfo // 定义返回的类型
 	)
+	// 记录日志
+	logger.Infof("Received request GetClusterInfo: %v", in)
 	clusterName := configValue.MySQLConfig.ClusterName // 集群的名字
 	partitions, _ := utils.GetPatitionInfo()
 	// 查询gpu对应的id信息
@@ -1548,6 +1550,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		return nil, st.Err()
 	}
 	for _, v := range partitions {
+		fmt.Print(99999)
 		var tresAlloc string
 		var runningGpus int
 		var idleGpus int
@@ -1583,7 +1586,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			noAvailableGpus = 0
 			totalGpus = 0
 			// 获取作业信息
-			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND partition = ?", clusterName)
+			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND `partition` = ?", clusterName)
 			err := db.QueryRow(pdJobNumSqlConfig, v).Scan(&pdJobNum)
 			if err != nil {
 				errInfo := &errdetails.ErrorInfo{
@@ -1593,7 +1596,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
-			runningJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=1 AND partition = ?", clusterName)
+			runningJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=1 AND `partition` = ?", clusterName)
 			err = db.QueryRow(runningJobNumSqlConfig, v).Scan(&runningJobNum)
 			if err != nil {
 				errInfo := &errdetails.ErrorInfo{
@@ -1603,6 +1606,51 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
+			resultRatio := float64(runningNodes) / float64(totalNodes)
+			percentage := int(resultRatio * 100) // 保留整数
+			if state == "up" {
+				parts = append(parts, &pb.PartitionInfo{
+					PartitionName:         v,
+					NodeCount:             uint32(totalNodes),
+					RunningNodeCount:      uint32(runningNodes),
+					IdleNodeCount:         uint32(idleNodes),
+					NotAvailableNodeCount: uint32(noAvailableNodes),
+					CpuCoreCount:          uint32(totalCores),
+					RunningCpuCount:       uint32(runningCores),
+					IdleCpuCount:          uint32(idleCores),
+					NotAvailableCpuCount:  uint32(noAvailableCores),
+					GpuCoreCount:          uint32(totalGpus),
+					RunningGpuCount:       uint32(runningGpus),
+					IdleGpuCount:          uint32(idleGpus),
+					NotAvailableGpuCount:  uint32(noAvailableGpus),
+					JobCount:              uint32(pdJobNum) + uint32(runningJobNum),
+					RunningJobCount:       uint32(runningJobNum),
+					PendingJobCount:       uint32(pdJobNum),
+					UsageRatePercentage:   uint32(percentage),
+					PartitionStatus:       pb.PartitionInfo_AVAILABLE,
+				})
+			} else {
+				parts = append(parts, &pb.PartitionInfo{
+					PartitionName:         v,
+					NodeCount:             uint32(totalNodes),
+					RunningNodeCount:      uint32(runningNodes),
+					IdleNodeCount:         uint32(idleNodes),
+					NotAvailableNodeCount: uint32(noAvailableNodes),
+					CpuCoreCount:          uint32(totalCores),
+					RunningCpuCount:       uint32(runningCores),
+					IdleCpuCount:          uint32(idleCores),
+					NotAvailableCpuCount:  uint32(noAvailableCores),
+					GpuCoreCount:          uint32(totalGpus),
+					RunningGpuCount:       uint32(runningGpus),
+					IdleGpuCount:          uint32(idleGpus),
+					NotAvailableGpuCount:  uint32(noAvailableGpus),
+					JobCount:              uint32(pdJobNum) + uint32(runningJobNum),
+					RunningJobCount:       uint32(runningJobNum),
+					PendingJobCount:       uint32(pdJobNum),
+					UsageRatePercentage:   uint32(percentage),
+					PartitionStatus:       pb.PartitionInfo_NOT_AVAILABLE,
+				})
+			}
 		} else {
 			// 第三列是gpu卡的信息
 			singerNodeGpusInfo := strings.Split(gpuInfo, ":")
@@ -1610,7 +1658,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
 			totalGpus = singerNodeGpusInt * totalNodes // 总的GPU卡数
 			// 排队作业统计
-			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND partition = ?", clusterName)
+			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND `partition` = ?", clusterName)
 			err := db.QueryRow(pdJobNumSqlConfig, v).Scan(&pdJobNum)
 			if err != nil {
 				errInfo := &errdetails.ErrorInfo{
@@ -1621,7 +1669,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				return nil, st.Err()
 			}
 			// 正在运行的作业不只要统计数量，还要统计GPU卡的使用情况
-			runningJobNumSqlConfig := fmt.Sprintf("SELECT tres_alloc FROM %s_job_table WHERE state=1 AND partition = ?", clusterName)
+			runningJobNumSqlConfig := fmt.Sprintf("SELECT tres_alloc FROM %s_job_table WHERE state=1 AND `partition` = ?", clusterName)
 			err = db.QueryRow(runningJobNumSqlConfig, v).Scan(&tresAlloc) // 查询到多个数据
 			if err != nil {
 				errInfo := &errdetails.ErrorInfo{
