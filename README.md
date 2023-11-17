@@ -1,6 +1,6 @@
 # slurm adapter for SCOW
 
-当前实现的`scow-scheduluer-adapter-interface`版本：v1.2.0
+当前实现的`scow-scheduluer-adapter-interface`版本：v1.3.0
 
 ## Build
 
