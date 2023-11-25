@@ -62,7 +62,7 @@ func init() {
 
 // version
 func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
-	return &pb.GetVersionResponse{Major: 1, Minor: 2, Patch: 0}, nil
+	return &pb.GetVersionResponse{Major: 1, Minor: 3, Patch: 0}, nil
 }
 
 // UserService
@@ -2317,7 +2317,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				singerJobQos := singerJobInfo[10]
 				singerJobWorkingDirectory := singerJobInfo[15]
 				// singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
-				if singerJobInfo[6] == "UNLIMITED" {
+				if singerJobInfo[6] == "UNLIMITED" || singerJobInfo[6] == "INVALID" {
 					singerJobtimeLimitMinutes = 0
 				} else {
 					singerJobtimeLimitMinutes = utils.GetTimeLimit(singerJobInfo[6])
