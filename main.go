@@ -62,7 +62,7 @@ func init() {
 
 // version
 func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
-	return &pb.GetVersionResponse{Major: 1, Minor: 3, Patch: 0}, nil
+	return &pb.GetVersionResponse{Major: 1, Minor: 4, Patch: 0}, nil
 }
 
 // UserService
