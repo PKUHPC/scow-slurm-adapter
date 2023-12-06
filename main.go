@@ -56,6 +56,10 @@ type serverVersion struct {
 	pb.UnimplementedVersionServiceServer
 }
 
+type serverAppServer struct {
+	pb.UnimplementedAppServiceServer
+}
+
 func init() {
 	configValue = utils.ParseConfig(utils.DefaultConfigPath)
 }
@@ -63,6 +67,11 @@ func init() {
 // version
 func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
 	return &pb.GetVersionResponse{Major: 1, Minor: 4, Patch: 0}, nil
+}
+
+// appservice
+func (s *serverAppServer) GetAppConnectionInfo(ctx context.Context, in *pb.GetAppConnectionInfoRequest) (*pb.GetAppConnectionInfoResponse, error) {
+	return &pb.GetAppConnectionInfoResponse{}, nil
 }
 
 // UserService
