@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
-	"unicode"
 
 	"os/exec"
 	"os/user"
@@ -338,13 +338,26 @@ func GetUserNameByUid(uid int) (string, error) {
 }
 
 // 判断字符串中是否包含大写字母
-func ContainsUppercase(s string) bool {
-	for _, char := range s {
-		if unicode.IsUpper(char) {
-			return true
-		}
+func CheckAccountOrUserStrings(s string) bool {
+
+	pattern := "^[a-z0-9_]+$"
+	// 编译正则表达式
+	reg := regexp.MustCompile(pattern)
+	// 使用正则表达式判断字符串是否符合模式
+	if reg.MatchString(s) {
+		return true
+		// fmt.Println("字符串符合要求")
+	} else {
+		// fmt.Println("字符串不符合要求")
+		return false
 	}
-	return false
+
+	// for _, char := range s {
+	// 	if unicode.IsUpper(char) {
+	// 		return true
+	// 	}
+	// }
+	// return false
 }
 
 // 本地提交作业函数

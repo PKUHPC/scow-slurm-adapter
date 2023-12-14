@@ -92,13 +92,13 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	defaultQos := configValue.Slurm.DefaultQOS
 
 	// 检查用户名、账户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName) // 重新判断一下
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)      // 重新判断一下
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -234,13 +234,13 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 	clusterName := configValue.MySQLConfig.ClusterName
 
 	// 检查账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -415,13 +415,13 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	logger.Infof("Received request BlockUserInAccount: %v", in)
 
 	// 检查账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -488,13 +488,13 @@ func (s *serverUser) UnblockUserInAccount(ctx context.Context, in *pb.UnblockUse
 	// 记录日志
 	logger.Infof("Received request UnblockUserInAccount: %v", in)
 	// 检查账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -567,13 +567,13 @@ func (s *serverUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 	// 记录日志
 	logger.Infof("Received request QueryUserInAccountBlockStatus: %v", in)
 	// 检查账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -635,12 +635,12 @@ func (s *serverAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 	// 记录日志
 	logger.Infof("Received request ListAccounts: %v", in)
 	// 检查用户名中是否包含大写字母
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultUser {
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_CONTAIN_UPPER_LETTER",
+			Reason: "USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -704,13 +704,13 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 	// 记录日志
 	logger.Infof("Received request CreateAccount: %v", in)
 	// 检查账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	resultUser := utils.ContainsUppercase(in.OwnerUserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	resultUser := utils.CheckAccountOrUserStrings(in.OwnerUserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -785,12 +785,12 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 	// 记录日志
 	logger.Infof("Received request BlockAccount: %v", in)
 	// 检查账户名中是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	if resultAcct {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	if !resultAcct {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -876,12 +876,12 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 	// 记录日志
 	logger.Infof("Received request UnblockAccount: %v", in)
 	// 检查用户名中是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	if resultAcct {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	if !resultAcct {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1045,12 +1045,12 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	// 记录日志
 	logger.Infof("Received request QueryAccountBlockStatus: %v", in)
 	// 检查用户名中是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.AccountName)
-	if resultAcct {
+	resultAcct := utils.CheckAccountOrUserStrings(in.AccountName)
+	if !resultAcct {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account contains uppercase letters.")
+		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1299,12 +1299,12 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 	// 记录日志
 	logger.Infof("Received request GetAvailablePartitions: %v", in)
 	// 检查用户名中是否包含大写字母
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultUser {
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_CONTAIN_UPPER_LETTER",
+			Reason: "USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -1836,12 +1836,12 @@ func (s *serverJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 	// 记录日志
 	logger.Infof("Received request CancelJob: %v", in)
 	// 检查用户名中是否包含大写字母
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultUser {
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_CONTAIN_UPPER_LETTER",
+			Reason: "USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -2913,13 +2913,13 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	// 记录日志
 	logger.Infof("Received request SubmitJob: %v", in)
 	// 判断账户名、用户名是否包含大写字母
-	resultAcct := utils.ContainsUppercase(in.Account)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultAcct || resultUser {
+	resultAcct := utils.CheckAccountOrUserStrings(in.Account)
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultAcct || !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_USER_CONTAIN_UPPER_LETTER",
+			Reason: "ACCOUNT_USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The account or username contains uppercase letters.")
+		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -3017,12 +3017,12 @@ func (s *serverJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 	)
 	// 记录日志
 	logger.Infof("Received request SubmitFileAsJob: %v", in)
-	resultUser := utils.ContainsUppercase(in.UserId)
-	if resultUser {
+	resultUser := utils.CheckAccountOrUserStrings(in.UserId)
+	if !resultUser {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_CONTAIN_UPPER_LETTER",
+			Reason: "USER_CONTAIN_ILLEGAL_CHARACTERS",
 		}
-		st := status.New(codes.Internal, "The username contains uppercase letters.")
+		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
