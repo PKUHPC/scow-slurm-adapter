@@ -152,7 +152,15 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 
 	baseQos := strings.Join(qosList, ",")
 	// 查询用户是否在系统中
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	// 检查用户是否在slurm中
 	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
@@ -163,8 +171,24 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
-			utils.ExecuteShellCommand(createUserCmd)
-			utils.ExecuteShellCommand(modifyUserCmd)
+			retcode01 := utils.ExecuteShellCommand(createUserCmd)
+			if retcode01 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "EXEC_COMMAND_FAILED",
+				}
+				st := status.New(codes.AlreadyExists, "Command exec fail.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+			retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
+			if retcode02 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "EXEC_COMMAND_FAILED",
+				}
+				st := status.New(codes.AlreadyExists, "Command exec fail.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 		}
 
 		// var wg sync.WaitGroup
@@ -191,8 +215,24 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 		for _, v := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' partition='%s' account='%s'", in.UserId, v, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
-			utils.ExecuteShellCommand(createUserCmd)
-			utils.ExecuteShellCommand(modifyUserCmd)
+			retCode1 := utils.ExecuteShellCommand(createUserCmd)
+			if retCode1 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "EXEC_COMMAND_FAILED",
+				}
+				st := status.New(codes.AlreadyExists, "Command exec fail. ")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+			retCode2 := utils.ExecuteShellCommand(modifyUserCmd)
+			if retCode2 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "EXEC_COMMAND_FAILED",
+				}
+				st := status.New(codes.AlreadyExists, "Command exec fail.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 		}
 
 		// var wg sync.WaitGroup
@@ -399,9 +439,25 @@ func (s *serverUser) RemoveUserFromAccount(ctx context.Context, in *pb.RemoveUse
 		return nil, st.Err()
 	}
 	updateDefaultAcctCmd := fmt.Sprintf("sacctmgr -i update user set DefaultAccount=%s where user=%s", acctList[0], in.UserId)
-	utils.ExecuteShellCommand(updateDefaultAcctCmd)
+	retcode1 := utils.ExecuteShellCommand(updateDefaultAcctCmd)
+	if retcode1 != 0 { // 新加逻辑
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXECUTE_FAILED",
+		}
+		st := status.New(codes.Internal, "Shell command execute falied!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	deleteUerFromAcctCmd := fmt.Sprintf("sacctmgr -i delete user name=%s account=%s", in.UserId, in.AccountName)
-	utils.ExecuteShellCommand(deleteUerFromAcctCmd)
+	retcode2 := utils.ExecuteShellCommand(deleteUerFromAcctCmd)
+	if retcode2 != 0 { // 新加逻辑
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXECUTE_FAILED",
+		}
+		st := status.New(codes.Internal, "Shell command execute falied!")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	return &pb.RemoveUserFromAccountResponse{}, nil
 }
 
@@ -432,10 +488,9 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "ACCOUNT_NOT_FOUND",
+			Reason: "SQL_QUERY_FAILED",
 		}
-		message := fmt.Sprintf("%s does not exists.", in.AccountName)
-		st := status.New(codes.NotFound, message)
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -444,10 +499,9 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 	err = db.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
-			Reason: "USER_NOT_FOUND",
+			Reason: "SQL_QUERY_FAILED",
 		}
-		message := fmt.Sprintf("%s does not exists.", in.UserId)
-		st := status.New(codes.NotFound, message)
+		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -465,7 +519,7 @@ func (s *serverUser) BlockUserInAccount(ctx context.Context, in *pb.BlockUserInA
 		return nil, st.Err()
 	}
 	// 关联存在的情况下直接封锁账户
-	blockUserCmd := fmt.Sprintf("sacctmgr -i -Q modify user where name=%s account=%s set MaxSubmitJobs=0  MaxJobs=0 GrpJobs=0 GrpSubmit=0 GrpSubmitJobs=0 MaxSubmitJobs=0", in.UserId, in.AccountName)
+	blockUserCmd := fmt.Sprintf("sacctmgr -i -Q modify user where name=%s account=%s set MaxSubmitJobs=0 MaxJobs=0 GrpJobs=0 GrpSubmit=0 GrpSubmitJobs=0 MaxSubmitJobs=0", in.UserId, in.AccountName)
 	res := utils.ExecuteShellCommand(blockUserCmd)
 	if res == 0 {
 		return &pb.BlockUserInAccountResponse{}, nil
@@ -720,7 +774,15 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
 	err := db.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
 	if err != nil {
-		partitions, _ := utils.GetPatitionInfo() // 获取系统中计算分区信息
+		partitions, err := utils.GetPatitionInfo() // 获取系统中计算分区信息
+		if err != nil || len(partitions) == 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		// 获取系统中Qos
 		qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 		rows, err := db.Query(qosSqlConfig)
@@ -757,12 +819,36 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		}
 		baseQos := strings.Join(qosList, ",")
 		createAccountCmd := fmt.Sprintf("sacctmgr -i create account name=%s", in.AccountName)
-		utils.ExecuteShellCommand(createAccountCmd)
+		retcode := utils.ExecuteShellCommand(createAccountCmd)
+		if retcode != 0 { // 新加
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		for _, p := range partitions {
 			createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s partition=%s account=%s", in.OwnerUserId, p, in.AccountName)
 			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, defaultQos)
-			utils.ExecuteShellCommand(createUserCmd)
-			utils.ExecuteShellCommand(modifyUserCmd)
+			retcode01 := utils.ExecuteShellCommand(createUserCmd)
+			if retcode01 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+			retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
+			if retcode02 != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 		}
 		return &pb.CreateAccountResponse{}, nil
 	}
@@ -809,10 +895,28 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	// 获取计算分区AllowAccounts的值
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
-	output, _ := utils.RunCommand(getAllowAcctCmd)
+	// getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", "compute")
+
+	output, err := utils.RunCommand(getAllowAcctCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	if output == "ALL" {
 		acctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE deleted = 0 AND acct != ?", clusterName)
 		rows, err := db.Query(acctSqlConfig, in.AccountName)
@@ -849,7 +953,15 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		allowAcct := strings.Join(acctList, ",")
 		for _, v := range partitions {
 			updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition='%s' AllowAccounts='%s'", v, allowAcct)
-			utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+			retcode := utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+			if retcode != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 		}
 		return &pb.BlockAccountResponse{}, nil
 	}
@@ -864,7 +976,15 @@ func (s *serverAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 	updateAllowAcct := utils.DeleteSlice(AllowAcctList, in.AccountName)
 	for _, p := range partitions {
 		updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(updateAllowAcct, ","))
-		utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+		code := utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+		if code != 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 	}
 	return &pb.BlockAccountResponse{}, nil
 }
@@ -898,9 +1018,25 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
-	output, _ := utils.RunCommand(getAllowAcctCmd)
+	output, err := utils.RunCommand(getAllowAcctCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	if output == "ALL" {
 		return &pb.UnblockAccountResponse{}, nil
 	}
@@ -911,7 +1047,15 @@ func (s *serverAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		AllowAcctList = append(AllowAcctList, in.AccountName)
 		for _, p := range partitions {
 			updatePartitionAllowAcctCmd := fmt.Sprintf("scontrol update partition=%s AllowAccounts=%s", p, strings.Join(AllowAcctList, ","))
-			utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+			retcode := utils.ExecuteShellCommand(updatePartitionAllowAcctCmd)
+			if retcode != 0 {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 		}
 		return &pb.UnblockAccountResponse{}, nil
 	}
@@ -966,10 +1110,25 @@ func (s *serverAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 	}
 
 	// 查询allowAcct的值(ALL和具体的acct列表)
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
-	output, _ := utils.RunCommand(getAllowAcctCmd)
-
+	output, err := utils.RunCommand(getAllowAcctCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	// 获取和每个账户关联的用户的信息
 	for _, v := range acctList {
 		var userInfo []*pb.ClusterAccountInfo_UserInAccount
@@ -1067,10 +1226,26 @@ func (s *serverAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	// 获取系统中分区AllowAccounts信息
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
-	output, _ := utils.RunCommand(getAllowAcctCmd)
+	output, err := utils.RunCommand(getAllowAcctCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	if output == "ALL" {
 		return &pb.QueryAccountBlockStatusResponse{Blocked: false}, nil
 	}
@@ -1095,7 +1270,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 	// 记录日志
 	logger.Infof("Received request GetClusterConfig: %v", in)
 	// 获取系统计算分区信息
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	// 查系统中的所有qos
 	qosSqlConfig := "SELECT name FROM qos_table WHERE deleted = 0"
 	rows, err := db.Query(qosSqlConfig)
@@ -1143,7 +1326,7 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
 		output, err := utils.RunCommand(getPartitionInfoCmd)
 		// 不同slurm版本的问题
-		if err == nil {
+		if err == nil && utils.CheckSlurmStatus(output) == false {
 			configArray := strings.Split(output, ",")
 
 			if len(configArray) >= 4 {
@@ -1159,9 +1342,25 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalCpusCmd := fmt.Sprintf("scontrol show part | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'")
 				totalNodesCmd := fmt.Sprintf("scontrol show part | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'")
 
-				totalCpus, _ = utils.RunCommand(totalCpusCmd)
+				totalCpus, err = utils.RunCommand(totalCpusCmd)
+				if err != nil || utils.CheckSlurmStatus(totalCpus) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				totalMemsTmp, _ = utils.RunCommand(totalMemsCmd)
-				totalNodes, _ = utils.RunCommand(totalNodesCmd)
+				totalNodes, err = utils.RunCommand(totalNodesCmd)
+				if err != nil || utils.CheckSlurmStatus(totalNodes) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 			}
 
 			// totalCpusCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $3}'", configArray[0])
@@ -1189,18 +1388,42 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			// totalMemInt, _ = strconv.Atoi(totalMems)
 			totalMemInt = totalMems
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
-		} else {
+		} else if err != nil && utils.CheckSlurmStatus(output) == false {
 			// 获取总cpu、总内存、总节点数
 			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
-			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			totalCpus, err := utils.RunCommand(getPartitionTotalCpusCmd)
+			if err != nil || utils.CheckSlurmStatus(totalCpus) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld dwon.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
 			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
-			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			totalNodes, err := utils.RunCommand(getPartitionTotalNodesCmd)
+			if err != nil || utils.CheckSlurmStatus(totalNodes) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 
 			// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 			getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
-			nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+			nodeOutput, err := utils.RunCommand(getPartitionNodeNameCmd)
+			if err != nil || utils.CheckSlurmStatus(nodeOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			nodeArray := strings.Split(nodeOutput, ",")
 			res := strings.Contains(nodeArray[0], "[")
 			if res {
@@ -1209,23 +1432,54 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
 				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeName)
-				memOutput, _ := utils.RunCommand(getMemCmd)
+				memOutput, err := utils.RunCommand(getMemCmd)
+				if err != nil || utils.CheckSlurmStatus(memOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			} else {
 				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem=| awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
 				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
-				memOutput, _ := utils.RunCommand(getMemCmd)
+				memOutput, err := utils.RunCommand(getMemCmd)
+				if err != nil || utils.CheckSlurmStatus(memOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			}
+		} else {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
 
 		// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 		getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
-		nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+		nodeOutput, err := utils.RunCommand(getPartitionNodeNameCmd)
+		if err != nil || utils.CheckSlurmStatus(nodeOutput) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		nodeArray := strings.Split(nodeOutput, ",")
 
 		res := strings.Contains(nodeArray[0], "[")
@@ -1234,7 +1488,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 			gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
-			gpusOutput, _ := utils.RunCommand(gpusCmd)
+			gpusOutput, err := utils.RunCommand(gpusCmd)
+			if err != nil || utils.CheckSlurmStatus(gpusOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			if gpusOutput == "Gres=(null)" {
 				totalGpus = 0
 			} else {
@@ -1244,7 +1506,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 		} else {
 			getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
-			gpusOutput, _ := utils.RunCommand(getGpusCmd)
+			gpusOutput, err := utils.RunCommand(getGpusCmd)
+			if err != nil || utils.CheckSlurmStatus(gpusOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			if gpusOutput == "Gres=(null)" {
 				totalGpus = 0
 			} else {
@@ -1253,13 +1523,29 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 		}
 		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
-		qosOutput, _ := utils.RunCommand(getPartitionQosCmd)
+		qosOutput, err := utils.RunCommand(getPartitionQosCmd)
+		if err != nil || utils.CheckSlurmStatus(qosOutput) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		qosArray := strings.Split(qosOutput, "=")
 
 		// 获取AllowQos
 		getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
 		// 返回的是字符串
-		allowQosOutput, _ := utils.RunCommand(getPartitionAllowQosCmd)
+		allowQosOutput, err := utils.RunCommand(getPartitionAllowQosCmd)
+		if err != nil || utils.CheckSlurmStatus(allowQosOutput) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 
 		if qosArray[len(qosArray)-1] != "N/A" {
 			qos = append(qos, qosArray[len(qosArray)-1])
@@ -1384,7 +1670,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		return nil, st.Err()
 	}
 	// 关联关系存在的情况下去找用户
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	for _, partition := range partitions {
 		var (
 			totalMems int
@@ -1393,21 +1687,64 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			qos       []string
 		)
 		getPartitionAllowAccountsCmd := fmt.Sprintf("scontrol show part=%s | grep -i AllowAccounts | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
-		accouts, _ := utils.RunCommand(getPartitionAllowAccountsCmd) // 这个地方需要改一下，变成数组进行判断
+		accouts, err := utils.RunCommand(getPartitionAllowAccountsCmd) // 这个地方需要改一下，变成数组进行判断
+		if err != nil || utils.CheckSlurmStatus(accouts) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		// log.Println(len(strings.Split(accouts, ",")))                // 测试
 		index := arrays.Contains(strings.Split(accouts, ","), in.AccountName)
 		// strings.Contains(accouts, in.AccountName)
 		if accouts == "ALL" || index != -1 {
 			// 包含account
-			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
-			output, err := utils.RunCommand(getPartitionInfoCmd)
+			// getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
+			// output, err := utils.RunCommand(getPartitionInfoCmd)
+			// if err != nil || utils.CheckSlurmStatus(output) {
+			// 	errInfo := &errdetails.ErrorInfo{
+			// 		Reason: "COMMAND_EXEC_FAILED",
+			// 	}
+			// 	st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			// 	st, _ = st.WithDetails(errInfo)
+			// 	return nil, st.Err()
+			// }
 			getPartitionTotalCpusCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'", partition)
-			totalCpus, _ := utils.RunCommand(getPartitionTotalCpusCmd)
+			totalCpus, err := utils.RunCommand(getPartitionTotalCpusCmd)
+			if err != nil || utils.CheckSlurmStatus(totalCpus) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
 			getPartitionTotalNodesCmd := fmt.Sprintf("scontrol show partition=%s | grep TotalNodes | awk '{print $3}' | awk -F'=' '{print $2}'", partition)
-			totalNodes, _ := utils.RunCommand(getPartitionTotalNodesCmd)
+			totalNodes, err := utils.RunCommand(getPartitionTotalNodesCmd)
+			if err != nil || utils.CheckSlurmStatus(totalNodes) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
-			if err == nil {
+
+			getPartitionInfoCmd := fmt.Sprintf("scontrol show partition=%s | grep -i mem=", partition)
+			output, _ := utils.RunCommand(getPartitionInfoCmd)
+			if output != "" && utils.CheckSlurmStatus(output) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+			if output != "" {
 				configArray := strings.Split(output, ",")
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
 				totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
@@ -1426,7 +1763,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			} else {
 				// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 				getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
-				nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+				nodeOutput, err := utils.RunCommand(getPartitionNodeNameCmd)
+				if err != nil || utils.CheckSlurmStatus(nodeOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				nodeArray := strings.Split(nodeOutput, ",")
 				res := strings.Contains(nodeArray[0], "[")
 				if res {
@@ -1434,12 +1779,28 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 					nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
-					memOutput, _ := utils.RunCommand(getMemCmd)
+					memOutput, err := utils.RunCommand(getMemCmd)
+					if err != nil || utils.CheckSlurmStatus(memOutput) {
+						errInfo := &errdetails.ErrorInfo{
+							Reason: "COMMAND_EXEC_FAILED",
+						}
+						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+						st, _ = st.WithDetails(errInfo)
+						return nil, st.Err()
+					}
 					nodeMem, _ := strconv.Atoi(memOutput)
 					totalMemInt = nodeMem * totalNodeNumInt
 				} else {
 					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeArray[0])
-					memOutput, _ := utils.RunCommand(getMemCmd)
+					memOutput, err := utils.RunCommand(getMemCmd)
+					if err != nil || utils.CheckSlurmStatus(memOutput) {
+						errInfo := &errdetails.ErrorInfo{
+							Reason: "COMMAND_EXEC_FAILED",
+						}
+						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+						st, _ = st.WithDetails(errInfo)
+						return nil, st.Err()
+					}
 					nodeMem, _ := strconv.Atoi(memOutput)
 					totalMemInt = nodeMem * totalNodeNumInt
 				}
@@ -1454,7 +1815,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 
 			// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 			getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
-			nodeOutput, _ := utils.RunCommand(getPartitionNodeNameCmd)
+			nodeOutput, err := utils.RunCommand(getPartitionNodeNameCmd)
+			if err != nil || utils.CheckSlurmStatus(nodeOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			nodeArray := strings.Split(nodeOutput, ",")
 
 			res := strings.Contains(nodeArray[0], "[")
@@ -1463,7 +1832,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 				gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
-				gpusOutput, _ := utils.RunCommand(gpusCmd)
+				gpusOutput, err := utils.RunCommand(gpusCmd)
+				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				if gpusOutput == "Gres=(null)" {
 					totalGpus = 0
 				} else {
@@ -1473,7 +1850,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 			} else {
 				getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
-				gpusOutput, _ := utils.RunCommand(getGpusCmd)
+				gpusOutput, err := utils.RunCommand(getGpusCmd)
+				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				if gpusOutput == "Gres=(null)" {
 					totalGpus = 0
 				} else {
@@ -1482,13 +1867,29 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 			}
 			getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
-			qosOutput, _ := utils.RunCommand(getPartitionQosCmd)
+			qosOutput, err := utils.RunCommand(getPartitionQosCmd)
+			if err != nil || utils.CheckSlurmStatus(qosOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			qosArray := strings.Split(qosOutput, "=")
 
 			// 获取AllowQos
 			getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
 			// 返回的是字符串
-			allowQosOutput, _ := utils.RunCommand(getPartitionAllowQosCmd)
+			allowQosOutput, err := utils.RunCommand(getPartitionAllowQosCmd)
+			if err != nil || utils.CheckSlurmStatus(allowQosOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 
 			if qosArray[len(qosArray)-1] != "N/A" {
 				qos = append(qos, qosArray[len(qosArray)-1])
@@ -1523,7 +1924,15 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 	// 记录日志
 	logger.Infof("Received request GetClusterInfo: %v", in)
 	clusterName := configValue.MySQLConfig.ClusterName // 集群的名字
-	partitions, _ := utils.GetPatitionInfo()
+	partitions, err := utils.GetPatitionInfo()
+	if err != nil || len(partitions) == 0 {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	// // 查询gpu对应的id信息
 	// gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
 	// rows, err := db.Query(gpuSqlConfig)
@@ -1572,7 +1981,15 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		var tresAllocList []string
 		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
 		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
-		result, _ := utils.RunCommand(fullCmd) // 状态
+		result, err := utils.RunCommand(fullCmd) // 状态
+		if err != nil || utils.CheckSlurmStatus(result) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		resultList := strings.Split(result, " ")
 		state := resultList[4]
 		gpuInfo := resultList[3]
@@ -1764,7 +2181,6 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 					return nil, st.Err()
 				}
 				// 有运行中的GPU作业
-				logger.Infof("%v %v xxx", tresAllocList, v)
 				for _, resValue := range tresAllocList {
 					logger.Infof("%v", resValue)
 					runningGpus += int(utils.GetGpuAllocsFromGpuIdList(resValue, gpuIdList))
@@ -1926,11 +2342,27 @@ func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 	}
 	if in.DeltaMinutes >= 0 {
 		updateTimeLimitCmd := fmt.Sprintf("scontrol update job=%d TimeLimit+=%d", in.JobId, in.DeltaMinutes)
-		utils.RunCommand(updateTimeLimitCmd)
+		result, err := utils.RunCommand(updateTimeLimitCmd)
+		if err != nil || utils.CheckSlurmStatus(result) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 	} else {
 		minitues := int64(math.Abs(float64(in.DeltaMinutes)))
 		updateTimeLimitCmd := fmt.Sprintf("scontrol update job=%d TimeLimit-=%d", in.JobId, minitues)
-		utils.RunCommand(updateTimeLimitCmd)
+		result, err := utils.RunCommand(updateTimeLimitCmd)
+		if err != nil || utils.CheckSlurmStatus(result) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 	}
 	return &pb.ChangeJobTimeLimitResponse{}, nil
 }
@@ -2015,7 +2447,15 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	// 查找SelectType插件的值
 	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, _ := utils.RunCommand(slurmConfigCmd)
+	output, err := utils.RunCommand(slurmConfigCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	// 查询gpu对应的id信息
 	gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
@@ -2054,7 +2494,15 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 	// 状态为排队和挂起的作业信息
 	if state == 0 || state == 2 {
 		getReasonCmd := fmt.Sprintf("scontrol show job=%d |grep 'Reason=' | awk '{print $2}'| awk -F'=' '{print $2}'", jobId)
-		output, _ := utils.RunCommand(getReasonCmd)
+		output, err := utils.RunCommand(getReasonCmd)
+		if err != nil || utils.CheckSlurmStatus(output) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		reason = output
 		// 获取 stdout stderr 路径信息(不用了)
 		// getStdoutPathCmd := fmt.Sprintf("scontrol show job=%d | grep StdOut | awk -F'=' '{print $2}'", jobId)
@@ -2285,7 +2733,15 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 	pendingUserCmdTemp := fmt.Sprintf("squeue -t pending -u %s", strings.Join(submitUser, ","))
 	pendingUserCmd := pendingUserCmdTemp + " --noheader --format='%i=%R' | tr '\\n' ';'"
-	pendingUserResult, _ := utils.RunCommand(pendingUserCmd)
+	pendingUserResult, err := utils.RunCommand(pendingUserCmd)
+	if err != nil || utils.CheckSlurmStatus(pendingUserResult) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	if len(pendingUserResult) != 0 {
 		pendingUserMap = utils.GetPendingMapInfo(pendingUserResult)
 	}
@@ -2298,10 +2754,20 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			getJobInfoCmdLine = fmt.Sprintf("squeue -u %s -A %s --noheader", strings.Join(submitUser, ","), strings.Join(in.Filter.Accounts, ","))
 		}
 		// getJobInfoCmdLine := fmt.Sprintf("squeue -u %s --noheader", strings.Join(submitUser, ","))
-		// getFullCmdLine := getJobInfoCmdLine + " " + "--format='%a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
-		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
-		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
-		runningJobInfoList := strings.Split(runningjobInfo, ",")
+		// getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
+		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %N' | tr '\n' ';'"
+
+		runningjobInfo, err := utils.RunCommand(getFullCmdLine)
+		if err != nil || utils.CheckSlurmStatus(runningjobInfo) {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		// runningJobInfoList := strings.Split(runningjobInfo, ",")
+		runningJobInfoList := strings.Split(runningjobInfo, ";")
 		if len(runningJobInfoList) == 0 {
 			return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 		}
@@ -2315,8 +2781,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
 			var singerJobtimeLimitMinutes int64
-			if len(v) != 0 && len(strings.Split(v, " ")) >= 15 {
+			logger.Infof("RUNNING JOBS element %v", v)
+			logger.Infof("RUNNING JOBS length %v", len(strings.Split(v, " ")))
+			if len(strings.Split(v, " ")) == 17 {
 				singerJobInfo := strings.Split(v, " ")
+				logger.Infof("RUNNING JOBS List %v ", singerJobInfo)
+				logger.Infof("RUNNING JOBS List LENGTH %v ", len(singerJobInfo))
 				singerJobAccount := singerJobInfo[1]
 				singerJobUserName := singerJobInfo[13]
 				singerJobJobId, _ := strconv.Atoi(singerJobInfo[2])
@@ -2325,13 +2795,11 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				singerJobJobName := singerJobInfo[5]
 				singerJobQos := singerJobInfo[10]
 				singerJobWorkingDirectory := singerJobInfo[15]
-				// singerJobtimeLimitMinutes, _ := strconv.Atoi(singerJobInfo[6])
 				if singerJobInfo[6] == "UNLIMITED" || singerJobInfo[6] == "INVALID" {
 					singerJobtimeLimitMinutes = 0
 				} else {
 					singerJobtimeLimitMinutes = utils.GetTimeLimit(singerJobInfo[6])
 				}
-				// singerJobtimeLimitMinutes := utils.GetTimeLimit(singerJobInfo[6])
 				submittimeSqlConfig := fmt.Sprintf("SELECT time_submit FROM %s_job_table WHERE id_job = ?", clusterName)
 				db.QueryRow(submittimeSqlConfig, singerJobJobId).Scan(&timeSubmit)
 				if timeSubmit == 0 {
@@ -2420,7 +2888,15 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	}
 	// 查找SelectType插件的值
 	slurmSelectTypeConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
+	output, err := utils.RunCommand(slurmSelectTypeConfigCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 
 	// cputresId、memTresId、nodeTresId
 	cpuTresSqlConfig := "SELECT id FROM tres_table WHERE type = 'cpu'"
@@ -2653,7 +3129,15 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	defer rows.Close()
 
 	pendingCmd := "squeue -t pending --noheader --format='%i %R' | tr '\n' ','"
-	pendingResult, _ := utils.RunCommand(pendingCmd)
+	pendingResult, err := utils.RunCommand(pendingCmd)
+	if err != nil || utils.CheckSlurmStatus(pendingResult) {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "COMMAND_EXEC_FAILED",
+		}
+		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
 	if len(pendingResult) != 0 {
 		pendingMap = utils.GetMapInfo(pendingResult)
 	}
@@ -2696,7 +3180,15 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			} else {
 				getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
 				getReasonCmd := getReasonCmdTmp + " --format='%R'"
-				reason, _ = utils.RunCommand(getReasonCmd)
+				reason, err = utils.RunCommand(getReasonCmd)
+				if err != nil || utils.CheckSlurmStatus(reason) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 			} // 这里还要补充下逻辑
 
 			if state == 0 {
@@ -3038,7 +3530,22 @@ func (s *serverJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+
 	// 具体的提交逻辑
+	// updateScript := "#!/bin/bash\n"
+	// trimmedScript := strings.TrimLeft(in.Script, "\n") // 去除最前面的空行
+	// // 通过换行符 "\n" 分割字符串
+	// checkBool1 := strings.Contains(trimmedScript, "--chdir")
+	// checkBool2 := strings.Contains(trimmedScript, " -D ")
+	// if !checkBool1 && !checkBool2 {
+	// 	chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
+	// 	updateScript = updateScript + chdirString
+	// 	for _, value := range strings.Split(trimmedScript, "\n")[1:] {
+	// 		updateScript = updateScript + value + "\n"
+	// 	}
+	// 	in.Script = updateScript
+	// }
+
 	submitResponse, err := utils.LocalSubmitJob(in.Script, in.UserId)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -3083,8 +3590,8 @@ func main() {
 	// 创建一个 lumberjack.Logger，用于日志轮转配置
 	logFile := &lumberjack.Logger{
 		Filename:   "server.log", // 日志文件路径
-		MaxSize:    10,           // 日志文件的最大大小（以MB为单位）
-		MaxBackups: 3,            // 保留的旧日志文件数量
+		MaxSize:    100,           // 日志文件的最大大小（以MB为单位）
+		MaxBackups: 5,            // 保留的旧日志文件数量
 		MaxAge:     28,           // 保留的旧日志文件的最大天数
 		LocalTime:  true,         // 使用本地时间戳
 		Compress:   true,         // 是否压缩旧日志文件

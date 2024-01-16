@@ -11,7 +11,7 @@ import (
 
 func TestGetAvailablePartitions(t *testing.T) {
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}
@@ -20,8 +20,8 @@ func TestGetAvailablePartitions(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.GetAvailablePartitionsRequest{
-		AccountName: "a_admin820",
-		UserId:      "test02",
+		AccountName: "hpc0006173409",
+		UserId:      "test07",
 	}
 	res, err := client.GetAvailablePartitions(context.Background(), req)
 	if err != nil {

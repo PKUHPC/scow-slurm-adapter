@@ -26,8 +26,8 @@ func TestSubmitScriptAsJob(t *testing.T) {
 	// stdout := "slurm-%j.out"
 	// stderr := "slurm-%j.out"
 	req := &pb.SubmitScriptAsJobRequest{
-		UserId: "root",
-		Script: "sssss",
+		UserId:             "root",
+		Script:             "#!/bin/bash\\n#SBATCH -o job.%j.out\\n#SBATCH -p compute\\n#SBATCH --qos=low\\n#SBATCH -J myFirstJob\\n#SBATCH --nodes=1 \\n#SBATCH --ntasks-per-node=1\\n\\nmkdir angle\\ncd angle\\nfor str1 in 100 150 200 250 300\\n do\\n mkdir angle$str1 \\n cd angle$str1\\n  for str2 in {1..4}\\n  do\\n  mkdir $str2\\n  done\\n  cd ..\\ndone\\n\"",
 	}
 	res, err := client.SubmitScriptAsJob(context.Background(), req)
 	if err != nil {

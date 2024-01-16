@@ -21,8 +21,8 @@ func TestBlockUserInAccount(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.BlockUserInAccountRequest{
-		UserId:      "test07",
-		AccountName: "w_admin",
+		UserId:      "test03",
+		AccountName: "a_admin",
 	}
 	_, err = client.BlockUserInAccount(context.Background(), req)
 	if err != nil {

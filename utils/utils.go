@@ -89,12 +89,27 @@ func ExecuteShellCommand(command string) int {
 
 // 简单执行shell命令函数
 func RunCommand(command string) (string, error) {
+	// cmd := exec.Command("bash", "-c", command)
+	// output, err := cmd.CombinedOutput()
+	// if err != nil {
+	// 	return "", err
+	// }
+	// return strings.TrimSpace(string(output)), nil
 	cmd := exec.Command("bash", "-c", command)
-	output, err := cmd.CombinedOutput()
+
+	// 创建一个 bytes.Buffer 用于捕获输出
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	// 执行命令
+	err := cmd.Run()
+
 	if err != nil {
-		return "", err
+		return output.String(), err
 	}
-	return strings.TrimSpace(string(output)), nil
+
+	return strings.TrimSpace(output.String()), nil
 }
 
 // 数据库配置信息
@@ -115,11 +130,19 @@ func DatabaseConfig() string {
 // 获取全系统计算分区信息
 func GetPatitionInfo() ([]string, error) {
 	shellCmd := "scontrol show partition| grep PartitionName=| awk -F'=' '{print $2}'| tr '\n' ','"
-	output, err := RunCommand(shellCmd)
+	cmd := exec.Command("bash", "-c", shellCmd)
+
+	// 创建一个 bytes.Buffer 用于捕获输出
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	// 执行命令
+	err := cmd.Run()
 	if err != nil {
 		return nil, err
 	}
-	resOutput := strings.Split(output, ",")
+	resOutput := strings.Split(strings.TrimSpace(output.String()), ",")
 	resOutput = resOutput[:len(resOutput)-1]
 	return resOutput, nil
 }
@@ -214,41 +237,6 @@ func GetTimeLimit(timeLimit string) int64 {
 			timeLimitMinutes = int64(seconds)*0 + int64(minutes)*1 + int64(hours)*60
 		}
 		return timeLimitMinutes
-	}
-}
-
-func GetElapsedSeconds(cmd string) int64 {
-	var elapsedSeconds int64
-	ElapsedSecondsOutput, _ := RunCommand(cmd)
-	// 先判断作业时长中是否包含-
-	// 超过一天的作业
-	if strings.Contains(ElapsedSecondsOutput, "-") {
-		ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, "-")
-		day, _ := strconv.Atoi(ElapsedSecondsList[0])
-		ElapsedSecondsListNew := strings.Split(ElapsedSecondsList[1], ":")
-		hours, _ := strconv.Atoi(ElapsedSecondsListNew[0])
-		minutes, _ := strconv.Atoi(ElapsedSecondsListNew[1])
-		seconds, _ := strconv.Atoi(ElapsedSecondsListNew[2])
-		return int64(seconds) + int64(minutes)*60 + int64(hours)*3600 + int64(day)*24*3600
-	} else {
-		// 没有超过一天的作业
-		ElapsedSecondsList := strings.Split(ElapsedSecondsOutput, ":")
-		log.Println(ElapsedSecondsList, 111)
-		if len(ElapsedSecondsList) == 2 {
-			minutes, _ := strconv.Atoi(ElapsedSecondsList[0])
-			seconds, _ := strconv.Atoi(ElapsedSecondsList[1])
-			elapsedSeconds = int64(seconds) + int64(minutes)*60
-		} else {
-			hours, _ := strconv.Atoi(ElapsedSecondsList[0])
-			minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
-			seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
-			elapsedSeconds = int64(seconds) + int64(minutes)*60 + int64(hours)*3600
-		}
-		// hours, _ := strconv.Atoi(ElapsedSecondsList[0])
-		// minutes, _ := strconv.Atoi(ElapsedSecondsList[1])
-		// seconds, _ := strconv.Atoi(ElapsedSecondsList[2])
-		// elapsedSeconds := int64(seconds) + int64(minutes)*60 + int64(hours)*3600
-		return elapsedSeconds
 	}
 }
 
@@ -559,4 +547,13 @@ func sortByKey(list []*pb.JobInfo, fieldName string, sortOrder string) bool {
 func SortJobInfo(sortKey string, sortOrder string, jobInfo []*pb.JobInfo) []*pb.JobInfo {
 	sortByKey(jobInfo, sortKey, sortOrder)
 	return jobInfo
+}
+
+func CheckSlurmStatus(result string) bool {
+	subStr := "Unable to contact slurm controller"
+	if strings.Contains(result, subStr) {
+		return true
+	} else {
+		return false
+	}
 }
