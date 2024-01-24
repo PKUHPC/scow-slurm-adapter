@@ -66,7 +66,7 @@ func init() {
 
 // version
 func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
-	return &pb.GetVersionResponse{Major: 1, Minor: 4, Patch: 0}, nil
+	return &pb.GetVersionResponse{Major: 1, Minor: 5, Patch: 0}, nil
 }
 
 // appservice
@@ -2447,7 +2447,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	// 查找SelectType插件的值
 	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, err := utils.RunCommand(slurmConfigCmd)
+	output, _ := utils.RunCommand(slurmConfigCmd)
 	if err != nil || utils.CheckSlurmStatus(output) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
@@ -2733,15 +2733,16 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 	pendingUserCmdTemp := fmt.Sprintf("squeue -t pending -u %s", strings.Join(submitUser, ","))
 	pendingUserCmd := pendingUserCmdTemp + " --noheader --format='%i=%R' | tr '\\n' ';'"
-	pendingUserResult, err := utils.RunCommand(pendingUserCmd)
-	if err != nil || utils.CheckSlurmStatus(pendingUserResult) {
+	pendingUserResult, _ := utils.RunCommand(pendingUserCmd)
+	if utils.CheckSlurmStatus(pendingUserResult) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
-		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
+	// logger.Infof("error %v ", err)
 	if len(pendingUserResult) != 0 {
 		pendingUserMap = utils.GetPendingMapInfo(pendingUserResult)
 	}
@@ -2757,12 +2758,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		// getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
 		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %N' | tr '\n' ';'"
 
-		runningjobInfo, err := utils.RunCommand(getFullCmdLine)
-		if err != nil || utils.CheckSlurmStatus(runningjobInfo) {
+		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
+		if utils.CheckSlurmStatus(runningjobInfo) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
 			}
-			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+			st := status.New(codes.Internal, "slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
@@ -2781,12 +2782,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
 			var singerJobtimeLimitMinutes int64
-			logger.Infof("RUNNING JOBS element %v", v)
-			logger.Infof("RUNNING JOBS length %v", len(strings.Split(v, " ")))
+			// logger.Infof("RUNNING JOBS element %v", v)
+			// logger.Infof("RUNNING JOBS length %v", len(strings.Split(v, " ")))
 			if len(strings.Split(v, " ")) == 17 {
 				singerJobInfo := strings.Split(v, " ")
-				logger.Infof("RUNNING JOBS List %v ", singerJobInfo)
-				logger.Infof("RUNNING JOBS List LENGTH %v ", len(singerJobInfo))
+				// logger.Infof("RUNNING JOBS List %v ", singerJobInfo)
+				// logger.Infof("RUNNING JOBS List LENGTH %v ", len(singerJobInfo))
 				singerJobAccount := singerJobInfo[1]
 				singerJobUserName := singerJobInfo[13]
 				singerJobJobId, _ := strconv.Atoi(singerJobInfo[2])
@@ -2888,12 +2889,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	}
 	// 查找SelectType插件的值
 	slurmSelectTypeConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, err := utils.RunCommand(slurmSelectTypeConfigCmd)
-	if err != nil || utils.CheckSlurmStatus(output) {
+	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
+	if utils.CheckSlurmStatus(output) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
-		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -3129,12 +3130,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	defer rows.Close()
 
 	pendingCmd := "squeue -t pending --noheader --format='%i %R' | tr '\n' ','"
-	pendingResult, err := utils.RunCommand(pendingCmd)
-	if err != nil || utils.CheckSlurmStatus(pendingResult) {
+	pendingResult, _ := utils.RunCommand(pendingCmd)
+	if utils.CheckSlurmStatus(pendingResult) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
-		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
@@ -3180,12 +3181,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			} else {
 				getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
 				getReasonCmd := getReasonCmdTmp + " --format='%R'"
-				reason, err = utils.RunCommand(getReasonCmd)
-				if err != nil || utils.CheckSlurmStatus(reason) {
+				reason, _ = utils.RunCommand(getReasonCmd)
+				if utils.CheckSlurmStatus(reason) {
 					errInfo := &errdetails.ErrorInfo{
 						Reason: "COMMAND_EXEC_FAILED",
 					}
-					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st := status.New(codes.Internal, "slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
 					return nil, st.Err()
 				}
@@ -3532,19 +3533,19 @@ func (s *serverJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 	}
 
 	// 具体的提交逻辑
-	// updateScript := "#!/bin/bash\n"
-	// trimmedScript := strings.TrimLeft(in.Script, "\n") // 去除最前面的空行
-	// // 通过换行符 "\n" 分割字符串
-	// checkBool1 := strings.Contains(trimmedScript, "--chdir")
-	// checkBool2 := strings.Contains(trimmedScript, " -D ")
-	// if !checkBool1 && !checkBool2 {
-	// 	chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
-	// 	updateScript = updateScript + chdirString
-	// 	for _, value := range strings.Split(trimmedScript, "\n")[1:] {
-	// 		updateScript = updateScript + value + "\n"
-	// 	}
-	// 	in.Script = updateScript
-	// }
+	updateScript := "#!/bin/bash\n"
+	trimmedScript := strings.TrimLeft(in.Script, "\n") // 去除最前面的空行
+	// 通过换行符 "\n" 分割字符串
+	checkBool1 := strings.Contains(trimmedScript, "--chdir")
+	checkBool2 := strings.Contains(trimmedScript, " -D ")
+	if !checkBool1 && !checkBool2 {
+		chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
+		updateScript = updateScript + chdirString
+		for _, value := range strings.Split(trimmedScript, "\n")[1:] {
+			updateScript = updateScript + value + "\n"
+		}
+		in.Script = updateScript
+	}
 
 	submitResponse, err := utils.LocalSubmitJob(in.Script, in.UserId)
 	if err != nil {
@@ -3590,7 +3591,7 @@ func main() {
 	// 创建一个 lumberjack.Logger，用于日志轮转配置
 	logFile := &lumberjack.Logger{
 		Filename:   "server.log", // 日志文件路径
-		MaxSize:    100,           // 日志文件的最大大小（以MB为单位）
+		MaxSize:    100,          // 日志文件的最大大小（以MB为单位）
 		MaxBackups: 5,            // 保留的旧日志文件数量
 		MaxAge:     28,           // 保留的旧日志文件的最大天数
 		LocalTime:  true,         // 使用本地时间戳
