@@ -66,7 +66,7 @@ func init() {
 
 // version
 func (s *serverVersion) GetVersion(ctx context.Context, in *pb.GetVersionRequest) (*pb.GetVersionResponse, error) {
-	return &pb.GetVersionResponse{Major: 1, Minor: 4, Patch: 0}, nil
+	return &pb.GetVersionResponse{Major: 1, Minor: 5, Patch: 0}, nil
 }
 
 // appservice
@@ -3532,19 +3532,19 @@ func (s *serverJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 	}
 
 	// 具体的提交逻辑
-	// updateScript := "#!/bin/bash\n"
-	// trimmedScript := strings.TrimLeft(in.Script, "\n") // 去除最前面的空行
-	// // 通过换行符 "\n" 分割字符串
-	// checkBool1 := strings.Contains(trimmedScript, "--chdir")
-	// checkBool2 := strings.Contains(trimmedScript, " -D ")
-	// if !checkBool1 && !checkBool2 {
-	// 	chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
-	// 	updateScript = updateScript + chdirString
-	// 	for _, value := range strings.Split(trimmedScript, "\n")[1:] {
-	// 		updateScript = updateScript + value + "\n"
-	// 	}
-	// 	in.Script = updateScript
-	// }
+	updateScript := "#!/bin/bash\n"
+	trimmedScript := strings.TrimLeft(in.Script, "\n") // 去除最前面的空行
+	// 通过换行符 "\n" 分割字符串
+	checkBool1 := strings.Contains(trimmedScript, "--chdir")
+	checkBool2 := strings.Contains(trimmedScript, " -D ")
+	if !checkBool1 && !checkBool2 {
+		chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
+		updateScript = updateScript + chdirString
+		for _, value := range strings.Split(trimmedScript, "\n")[1:] {
+			updateScript = updateScript + value + "\n"
+		}
+		in.Script = updateScript
+	}
 
 	submitResponse, err := utils.LocalSubmitJob(in.Script, in.UserId)
 	if err != nil {
