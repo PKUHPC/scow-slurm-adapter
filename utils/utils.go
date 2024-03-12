@@ -36,6 +36,7 @@ type Service struct {
 
 type Slurm struct {
 	DefaultQOS string `yaml:"defaultqos"`
+    Slurmpath  string `yaml:"slurmpath"`
 }
 
 type Modulepath struct {
@@ -129,7 +130,9 @@ func DatabaseConfig() string {
 
 // 获取全系统计算分区信息
 func GetPatitionInfo() ([]string, error) {
-	shellCmd := "scontrol show partition| grep PartitionName=| awk -F'=' '{print $2}'| tr '\n' ','"
+  config := ParseConfig(DefaultConfigPath)
+  slurmpath := config.Slurm.Slurmpath
+	shellCmd := fmt.Sprintf("%s/bin/scontrol show partition| grep PartitionName=| awk -F'=' '{print $2}'| tr '\n' ','", slurmpath)
 	cmd := exec.Command("bash", "-c", shellCmd)
 
 	// 创建一个 bytes.Buffer 用于捕获输出
@@ -352,7 +355,9 @@ func CheckAccountOrUserStrings(s string) bool {
 func LocalSubmitJob(scriptString string, username string) (string, error) {
 	// 提交作业命令行
 	// cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
-	cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
+  config := ParseConfig(DefaultConfigPath)
+  slurmpath := config.Slurm.Slurmpath
+	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/sbatch'", username, slurmpath)
 	cmd := exec.Command("bash", "-c", cmdLine)
 
 	// 创建一个 bytes.Buffer 用于捕获输出
@@ -373,7 +378,9 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 }
 
 func LocalFileSubmitJob(filePath string, username string) (string, error) {
-	cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch %s'", username, filePath)
+  config := ParseConfig(DefaultConfigPath)
+  slurmpath := config.Slurm.Slurmpath
+	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/sbatch %s'", username, slurmpath, filePath)
 	cmd := exec.Command("bash", "-c", cmdLine)
 	// 创建一个 bytes.Buffer 用于捕获输出
 	var output bytes.Buffer
@@ -405,7 +412,9 @@ func GetUserHomedir(username string) (string, error) {
 
 // 取消作业函数
 func LocalCancelJob(username string, jobId int) (string, error) {
-	cmdLine := fmt.Sprintf("su - %s -c 'scancel %d'", username, jobId)
+  config := ParseConfig(DefaultConfigPath)
+  slurmpath := config.Slurm.Slurmpath
+	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/scancel %d'", username, slurmpath, jobId)
 	cmd := exec.Command("bash", "-c", cmdLine)
 	// 创建一个 bytes.Buffer 用于捕获输出
 	var output bytes.Buffer
