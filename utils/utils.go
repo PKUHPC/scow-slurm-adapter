@@ -354,10 +354,10 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 	// 提交作业命令行
 	// cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
   config := ParseConfig(DefaultConfigPath)
-  slurmpath := config.Slurm.Slurmpath
-	if config.Slurm.SlurmPath == "" {
+  slurmpath = config.Slurm.Slurmpath
+	if slurmpath == "" {
 		// 如果未定义，则将其设置为默认值 "/usr"
-		slurmpath := "/usr"
+		slurmpath = "/usr"
 	}
 	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/sbatch'", username, slurmpath)
 	cmd := exec.Command("bash", "-c", cmdLine)
@@ -382,9 +382,9 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 func LocalFileSubmitJob(filePath string, username string) (string, error) {
   config := ParseConfig(DefaultConfigPath)
   slurmpath := config.Slurm.Slurmpath
-	if config.Slurm.SlurmPath == "" {
+	if slurmpath == "" {
 		// 如果未定义，则将其设置为默认值 "/usr"
-		slurmpath := "/usr"
+		slurmpath = "/usr"
 	}
 	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/sbatch %s'", username, slurmpath, filePath)
 	cmd := exec.Command("bash", "-c", cmdLine)
@@ -420,9 +420,9 @@ func GetUserHomedir(username string) (string, error) {
 func LocalCancelJob(username string, jobId int) (string, error) {
   config := ParseConfig(DefaultConfigPath)
   slurmpath := config.Slurm.Slurmpath
-	if config.Slurm.SlurmPath == "" {
+	if slurmpath == "" {
 		// 如果未定义，则将其设置为默认值 "/usr"
-		slurmpath := "/usr"
+		slurmpath = "/usr"
 	}
 	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/scancel %d'", username, slurmpath, jobId)
 	cmd := exec.Command("bash", "-c", cmdLine)
