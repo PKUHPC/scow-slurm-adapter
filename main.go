@@ -1334,9 +1334,34 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
 				totalNodesCmd := fmt.Sprintf("echo %s | awk  -F'=' '{print $2}'", configArray[2])
 
-				totalCpus, _ = utils.RunCommand(totalCpusCmd)
-				totalMemsTmp, _ = utils.RunCommand(totalMemsCmd)
-				totalNodes, _ = utils.RunCommand(totalNodesCmd)
+				totalCpus, err = utils.RunCommand(totalCpusCmd)
+				if err != nil || utils.CheckSlurmStatus(totalCpus) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
+				totalMemsTmp, err = utils.RunCommand(totalMemsCmd)
+				if err != nil || utils.CheckSlurmStatus(totalMemsTmp) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
+				totalNodes, err = utils.RunCommand(totalNodesCmd)
+				if err != nil || utils.CheckSlurmStatus(totalNodes) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
+
 			} else if len(configArray) < 4 {
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
 				totalCpusCmd := fmt.Sprintf("scontrol show part | grep TotalCPUs | awk '{print $2}' | awk -F'=' '{print $2}'")
@@ -1351,7 +1376,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					st, _ = st.WithDetails(errInfo)
 					return nil, st.Err()
 				}
-				totalMemsTmp, _ = utils.RunCommand(totalMemsCmd)
+				totalMemsTmp, err = utils.RunCommand(totalMemsCmd)
+				if err != nil || utils.CheckSlurmStatus(totalMemsTmp) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				totalNodes, err = utils.RunCommand(totalNodesCmd)
 				if err != nil || utils.CheckSlurmStatus(totalNodes) {
 					errInfo := &errdetails.ErrorInfo{
@@ -1428,7 +1461,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			res := strings.Contains(nodeArray[0], "[")
 			if res {
 				getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
-				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+				nodeNameOutput, err := utils.RunCommand(getNodeNameCmd)
+				if err != nil || utils.CheckSlurmStatus(nodeNameOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 				// getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
 				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep  RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeName)
@@ -1485,7 +1526,15 @@ func (s *serverConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		res := strings.Contains(nodeArray[0], "[")
 		if res {
 			getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
-			nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+			nodeNameOutput, err := utils.RunCommand(getNodeNameCmd)
+			if err != nil || utils.CheckSlurmStatus(nodeNameOutput) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "COMMAND_EXEC_FAILED",
+				}
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 			gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
 			gpusOutput, err := utils.RunCommand(gpusCmd)
@@ -1747,7 +1796,16 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			if output != "" {
 				configArray := strings.Split(output, ",")
 				totalMemsCmd := fmt.Sprintf("echo %s | awk -F'=' '{print $2}'", configArray[1])
-				totalMemsTmp, _ := utils.RunCommand(totalMemsCmd)
+				totalMemsTmp, err := utils.RunCommand(totalMemsCmd)
+				if err != nil || utils.CheckSlurmStatus(totalMemsTmp) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
+
 				// totalMems1, _ := utils.RunCommand(totalMemsCmd1)
 				if strings.Contains(totalMemsTmp, "M") {
 					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
@@ -1776,7 +1834,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				res := strings.Contains(nodeArray[0], "[")
 				if res {
 					getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
-					nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+					nodeNameOutput, err := utils.RunCommand(getNodeNameCmd)
+					if err != nil || utils.CheckSlurmStatus(nodeNameOutput) {
+						errInfo := &errdetails.ErrorInfo{
+							Reason: "COMMAND_EXEC_FAILED",
+						}
+						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+						st, _ = st.WithDetails(errInfo)
+						return nil, st.Err()
+					}
 					nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep mem= | awk -F',' '{print $2}' | awk -F'=' '{print $2}'| awk -F'M' '{print $1}'", nodeName)
 					memOutput, err := utils.RunCommand(getMemCmd)
@@ -1829,7 +1895,15 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			res := strings.Contains(nodeArray[0], "[")
 			if res {
 				getNodeNameCmd := fmt.Sprintf("echo %s | awk -F'[' '{print $1,$2}' | awk -F'-' '{print $1}'", nodeArray[0])
-				nodeNameOutput, _ := utils.RunCommand(getNodeNameCmd)
+				nodeNameOutput, err := utils.RunCommand(getNodeNameCmd)
+				if err != nil || utils.CheckSlurmStatus(nodeNameOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					return nil, st.Err()
+				}
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
 				gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
 				gpusOutput, err := utils.RunCommand(gpusCmd)
@@ -1918,7 +1992,7 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 
 func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfoRequest) (*pb.GetClusterInfoResponse, error) {
 	var (
-		gpuId int
+		// gpuId int
 		parts []*pb.PartitionInfo // 定义返回的类型
 	)
 	// 记录日志
@@ -1933,41 +2007,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// // 查询gpu对应的id信息
-	// gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
-	// rows, err := db.Query(gpuSqlConfig)
-	// if err != nil {
-	// 	errInfo := &errdetails.ErrorInfo{
-	// 		Reason: "SQL_QUERY_FAILED",
-	// 	}
-	// 	st := status.New(codes.Internal, err.Error())
-	// 	st, _ = st.WithDetails(errInfo)
-	// 	return nil, st.Err()
-	// }
-	// defer rows.Close()
-	// for rows.Next() {
-	// 	err := rows.Scan(&gpuId)
-	// 	if err != nil {
-	// 		errInfo := &errdetails.ErrorInfo{
-	// 			Reason: "SQL_QUERY_FAILED",
-	// 		}
-	// 		st := status.New(codes.Internal, err.Error())
-	// 		st, _ = st.WithDetails(errInfo)
-	// 		return nil, st.Err()
-	// 	}
-	// 	gpuIdList = append(gpuIdList, gpuId)
-	// }
-	// err = rows.Err()
-	// if err != nil {
-	// 	errInfo := &errdetails.ErrorInfo{
-	// 		Reason: "SQL_QUERY_FAILED",
-	// 	}
-	// 	st := status.New(codes.Internal, err.Error())
-	// 	st, _ = st.WithDetails(errInfo)
-	// 	return nil, st.Err()
-	// }
 	for _, v := range partitions {
-		var tresAlloc string
 		var runningGpus int
 		var idleGpus int
 		var noAvailableGpus int
@@ -1978,10 +2018,18 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		var noAvailableCores int
 		var pdJobNum int
 		var runningJobNum int
-		var tresAllocList []string
+		// 新增变量
+		var state string
+		var totalNodes int
+		var runningNodes int
+		var idleNodes int
+		var noAvailableNodes int
+
 		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
-		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
+		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
+		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 		result, err := utils.RunCommand(fullCmd) // 状态
+		// fmt.Println(result, 111111)
 		if err != nil || utils.CheckSlurmStatus(result) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
@@ -1990,46 +2038,96 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
-		resultList := strings.Split(result, " ")
-		state := resultList[4]
-		gpuInfo := resultList[3]
-		nodeInfo := strings.Split(resultList[6], "/")
-		coresInfo := strings.Split(resultList[2], "/")
-		runningNodes, _ := strconv.Atoi(nodeInfo[0])
-		idleNodes, _ := strconv.Atoi(nodeInfo[1])
-		noAvailableNodes, _ := strconv.Atoi(nodeInfo[2])
-		totalNodes, _ := strconv.Atoi(nodeInfo[3])
-		totalCores, _ = strconv.Atoi(coresInfo[3])
-		runningCores, _ = strconv.Atoi(coresInfo[0])
-		idleCores, _ = strconv.Atoi(coresInfo[1])
-		noAvailableCores, _ = strconv.Atoi(coresInfo[2])
-		if resultList[3] == "(null)" {
+
+		// 改bug
+		partitionElements := strings.Split(result, ",")
+		// 解析每个元素
+		for _, partitionElement := range partitionElements {
+			// 移除可能存在的前导空格
+			partitionElement = strings.TrimSpace(partitionElement)
+			if partitionElement == "" {
+				continue
+			}
+
+			resultList := strings.Split(partitionElement, " ")
+			state = resultList[4]
+			nodeInfo := strings.Split(resultList[6], "/")
+			runningNodesTmp, _ := strconv.Atoi(nodeInfo[0])
+			runningNodes = runningNodes + runningNodesTmp
+			idleNodesTmp, _ := strconv.Atoi(nodeInfo[1])
+			idleNodes = idleNodes + idleNodesTmp
+			noAvailableNodesTmp, _ := strconv.Atoi(nodeInfo[2])
+			noAvailableNodes = noAvailableNodes + noAvailableNodesTmp
+			totalNodesTmp, _ := strconv.Atoi(nodeInfo[3])
+			totalNodes = totalNodesTmp + totalNodes
+			// cores
+			coresInfo := strings.Split(resultList[2], "/")
+			totalCores, _ = strconv.Atoi(coresInfo[3])
+			runningCoresTmp, _ := strconv.Atoi(coresInfo[0])
+			runningCores = runningCores + runningCoresTmp
+			idleCoresTmp, _ := strconv.Atoi(coresInfo[1])
+			idleCores = idleCores + idleCoresTmp
+			noAvailableCoresTmp, _ := strconv.Atoi(coresInfo[2])
+			noAvailableCores = noAvailableCores + noAvailableCoresTmp
+			// fmt.Println("Partition Element:", partitionElement)
+			gpuInfo := resultList[3] // 这是gpu的信息
+			if gpuInfo == "(null)" {
+				runningGpus = 0
+				idleGpus = 0
+				noAvailableGpus = 0
+				totalGpus = 0
+			} else {
+				singerNodeGpusInfo := strings.Split(gpuInfo, ":")
+				singerNodeGpus := singerNodeGpusInfo[len(singerNodeGpusInfo)-1] // 获取最后一个元素
+				singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
+				noAvailableGpus = noAvailableGpus + noAvailableNodes*singerNodeGpusInt
+				totalGpus = totalGpus + singerNodeGpusInt*totalNodes
+			}
+		}
+
+		// resultList := strings.Split(result, " ")
+		// state := resultList[4]
+		// gpuInfo := resultList[3]
+		// nodeInfo := strings.Split(resultList[6], "/")
+		// coresInfo := strings.Split(resultList[2], "/")
+		// runningNodes, _ := strconv.Atoi(nodeInfo[0])
+		// idleNodes, _ := strconv.Atoi(nodeInfo[1])
+		// noAvailableNodes, _ := strconv.Atoi(nodeInfo[2])
+		// totalNodes, _ := strconv.Atoi(nodeInfo[3])
+		// totalCores, _ = strconv.Atoi(coresInfo[3])
+		// runningCores, _ = strconv.Atoi(coresInfo[0])
+		// idleCores, _ = strconv.Atoi(coresInfo[1])
+		// noAvailableCores, _ = strconv.Atoi(coresInfo[2])
+		// if resultList[3] == "(null)" {
+		if totalGpus == 0 {
 			// 没有GPU卡
-			runningGpus = 0
-			idleGpus = 0
-			noAvailableGpus = 0
-			totalGpus = 0
+			// runningGpus = 0
+			// idleGpus = 0
+			// noAvailableGpus = 0
+			// totalGpus = 0
 			// 获取作业信息
-			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND `partition` = ?", clusterName)
-			err := db.QueryRow(pdJobNumSqlConfig, v).Scan(&pdJobNum)
-			if err != nil {
+			pdJobNumSqlCmd := fmt.Sprintf("squeue -p %s --noheader -t pd| wc -l", v)
+			pdresult, err := utils.RunCommand(pdJobNumSqlCmd)
+			if err != nil || utils.CheckSlurmStatus(pdresult) {
 				errInfo := &errdetails.ErrorInfo{
-					Reason: err.Error(),
+					Reason: "COMMAND_EXEC_FAILED",
 				}
-				st := status.New(codes.NotFound, err.Error())
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
-			runningJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=1 AND `partition` = ?", clusterName)
-			err = db.QueryRow(runningJobNumSqlConfig, v).Scan(&runningJobNum)
-			if err != nil {
+			pdJobNum, _ = strconv.Atoi(pdresult)
+			runningJobNumSqlCmd := fmt.Sprintf("squeue -p %s --noheader -t r| wc -l", v)
+			runningresult, err := utils.RunCommand(runningJobNumSqlCmd)
+			if err != nil || utils.CheckSlurmStatus(runningresult) {
 				errInfo := &errdetails.ErrorInfo{
-					Reason: err.Error(),
+					Reason: "COMMAND_EXEC_FAILED",
 				}
-				st := status.New(codes.NotFound, err.Error())
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
+			runningJobNum, _ = strconv.Atoi(runningresult)
 			resultRatio := float64(runningNodes) / float64(totalNodes)
 			percentage := int(resultRatio * 100) // 保留整数
 			if state == "up" {
@@ -2076,122 +2174,55 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				})
 			}
 		} else {
-			var gpuIdList []int
-			// 查询gpu对应的id信息
-			gpuSqlConfig := "SELECT id FROM tres_table WHERE type = 'gres' AND deleted = 0"
-			rows, err := db.Query(gpuSqlConfig)
-			if err != nil {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "SQL_QUERY_FAILED",
-				}
-				st := status.New(codes.Internal, err.Error())
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			}
-			defer rows.Close()
-			for rows.Next() {
-				err := rows.Scan(&gpuId)
-				if err != nil {
-					errInfo := &errdetails.ErrorInfo{
-						Reason: "SQL_QUERY_FAILED",
-					}
-					st := status.New(codes.Internal, err.Error())
-					st, _ = st.WithDetails(errInfo)
-					return nil, st.Err()
-				}
-				gpuIdList = append(gpuIdList, gpuId)
-			}
-			err = rows.Err()
-			if err != nil {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "SQL_QUERY_FAILED",
-				}
-				st := status.New(codes.Internal, err.Error())
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			}
-			if len(gpuIdList) == 0 {
-				// 没有设置gpu配置
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "GRES_NOT_FOUND",
-				}
-				st := status.New(codes.NotFound, "The gres set error.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			}
 			// 第三列是gpu卡的信息
-			singerNodeGpusInfo := strings.Split(gpuInfo, ":")
-			singerNodeGpus := singerNodeGpusInfo[len(singerNodeGpusInfo)-1] // 获取最后一个元素
-			singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
-			totalGpus = singerNodeGpusInt * totalNodes // 总的GPU卡数
+			// singerNodeGpusInfo := strings.Split(gpuInfo, ":")
+			// singerNodeGpus := singerNodeGpusInfo[len(singerNodeGpusInfo)-1] // 获取最后一个元素
+			// singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
+			// totalGpus = singerNodeGpusInt * totalNodes // 总的GPU卡数
 			// 排队作业统计
-			pdJobNumSqlConfig := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=0 AND `partition` = ?", clusterName)
-			// err := db.QueryRow(pdJobNumSqlConfig, v).Scan(&pdJobNum)
-			err = db.QueryRow(pdJobNumSqlConfig, v).Scan(&pdJobNum)
-			if err != nil {
+			pdJobNumSqlCmd := fmt.Sprintf("squeue -p %s --noheader -t pd| wc -l", v)
+			pdresult, err := utils.RunCommand(pdJobNumSqlCmd)
+			if err != nil || utils.CheckSlurmStatus(pdresult) {
 				errInfo := &errdetails.ErrorInfo{
-					Reason: err.Error(),
+					Reason: "COMMAND_EXEC_FAILED",
 				}
-				st := status.New(codes.NotFound, err.Error())
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
-			// 正在运行的作业不只要统计数量，还要统计GPU卡的使用情况
-			runningJobNumSql := fmt.Sprintf("SELECT count(*) FROM %s_job_table WHERE state=1 AND `partition` = ?", clusterName)
-			err = db.QueryRow(runningJobNumSql, v).Scan(&runningJobNum)
-			if err != nil {
+			pdJobNum, _ = strconv.Atoi(pdresult)
+			runningJobNumCmd := fmt.Sprintf("squeue -p %s --noheader -t r| wc -l", v)
+			runningResult, err := utils.RunCommand(runningJobNumCmd)
+			if err != nil || utils.CheckSlurmStatus(runningResult) {
 				errInfo := &errdetails.ErrorInfo{
-					Reason: err.Error(),
+					Reason: "COMMAND_EXEC_FAILED",
 				}
-				st := status.New(codes.NotFound, err.Error())
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
+			runningJobNum, _ = strconv.Atoi(runningResult)
 			if runningJobNum != 0 {
-				runningJobNumSqlConfig := fmt.Sprintf("SELECT tres_alloc FROM %s_job_table WHERE state=1 AND `partition` = ?", clusterName)
-				rows, err = db.Query(runningJobNumSqlConfig, v) // 查询到多个数据
-				if err != nil {
+				// 获取正在使用的GPU卡数
+				useGpuCardstr := fmt.Sprintf("squeue -p %s -t r ", v)
+				useGpuCardCmd := useGpuCardstr + " " + " --format='%b' --noheader | awk -F':' '{print $3}' | awk '{sum+=$1} END {print sum}'"
+				useGpuCardResult, err := utils.RunCommand(useGpuCardCmd)
+				if err != nil || utils.CheckSlurmStatus(useGpuCardResult) {
 					errInfo := &errdetails.ErrorInfo{
-						Reason: "SQL_QUERY_FAILED",
+						Reason: "COMMAND_EXEC_FAILED",
 					}
-					st := status.New(codes.Internal, err.Error())
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
 					return nil, st.Err()
 				}
-				defer rows.Close()
-				for rows.Next() {
-					err := rows.Scan(&tresAlloc)
-					if err != nil {
-						errInfo := &errdetails.ErrorInfo{
-							Reason: "SQL_QUERY_FAILED",
-						}
-						st := status.New(codes.Internal, err.Error())
-						st, _ = st.WithDetails(errInfo)
-						return nil, st.Err()
-					}
-					tresAllocList = append(tresAllocList, tresAlloc) // 记录了所有的gpu作业的信息
-				}
-				err = rows.Err()
-				if err != nil {
-					errInfo := &errdetails.ErrorInfo{
-						Reason: "SQL_QUERY_FAILED",
-					}
-					st := status.New(codes.Internal, err.Error())
-					st, _ = st.WithDetails(errInfo)
-					return nil, st.Err()
-				}
-				// 有运行中的GPU作业
-				for _, resValue := range tresAllocList {
-					logger.Infof("%v", resValue)
-					runningGpus += int(utils.GetGpuAllocsFromGpuIdList(resValue, gpuIdList))
-				}
-				logger.Infof("runningGpus %v ", runningGpus)
-				noAvailableGpus = noAvailableNodes * singerNodeGpusInt
+				runningGpus, _ = strconv.Atoi(useGpuCardResult)
+				// noAvailableGpus = noAvailableNodes * singerNodeGpusInt
 				idleGpus = totalGpus - runningGpus - noAvailableGpus
 			} else {
 				runningGpus = 0
-				noAvailableGpus = noAvailableNodes * singerNodeGpusInt
-				idleGpus = idleNodes * singerNodeGpusInt
+				// noAvailableGpus = noAvailableNodes * singerNodeGpusInt
+				// idleGpus = idleNodes * singerNodeGpusInt
+				idleGpus = totalGpus
 			}
 			resultRatio := float64(runningNodes) / float64(totalNodes)
 			percentage := int(resultRatio * 100) // 保留整数
@@ -2343,6 +2374,7 @@ func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 	if in.DeltaMinutes >= 0 {
 		updateTimeLimitCmd := fmt.Sprintf("scontrol update job=%d TimeLimit+=%d", in.JobId, in.DeltaMinutes)
 		result, err := utils.RunCommand(updateTimeLimitCmd)
+		fmt.Println(222, result, err, 1111)
 		if err != nil || utils.CheckSlurmStatus(result) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
@@ -2447,7 +2479,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 	// 查找SelectType插件的值
 	slurmConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, _ := utils.RunCommand(slurmConfigCmd)
+	output, err := utils.RunCommand(slurmConfigCmd)
 	if err != nil || utils.CheckSlurmStatus(output) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
@@ -2733,8 +2765,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 
 	pendingUserCmdTemp := fmt.Sprintf("squeue -t pending -u %s", strings.Join(submitUser, ","))
 	pendingUserCmd := pendingUserCmdTemp + " --noheader --format='%i=%R' | tr '\\n' ';'"
-	pendingUserResult, _ := utils.RunCommand(pendingUserCmd)
-	if utils.CheckSlurmStatus(pendingUserResult) {
+	pendingUserResult, err := utils.RunCommand(pendingUserCmd)
+	if err != nil || utils.CheckSlurmStatus(pendingUserResult) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
@@ -2758,8 +2790,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		// getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %n %N' | tr '\n' ','"
 		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %N' | tr '\n' ';'"
 
-		runningjobInfo, _ := utils.RunCommand(getFullCmdLine)
-		if utils.CheckSlurmStatus(runningjobInfo) {
+		runningjobInfo, err := utils.RunCommand(getFullCmdLine)
+		if err != nil || utils.CheckSlurmStatus(runningjobInfo) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
 			}
@@ -2782,8 +2814,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var singerJobGpusAlloc int32
 			var singerJobTimeSubmit *timestamppb.Timestamp
 			var singerJobtimeLimitMinutes int64
-			// logger.Infof("RUNNING JOBS element %v", v)
-			// logger.Infof("RUNNING JOBS length %v", len(strings.Split(v, " ")))
 			if len(strings.Split(v, " ")) == 17 {
 				singerJobInfo := strings.Split(v, " ")
 				// logger.Infof("RUNNING JOBS List %v ", singerJobInfo)
@@ -2889,8 +2919,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	}
 	// 查找SelectType插件的值
 	slurmSelectTypeConfigCmd := fmt.Sprintf("scontrol show config | grep 'SelectType ' | awk -F'=' '{print $2}' | awk -F'/' '{print $2}'")
-	output, _ := utils.RunCommand(slurmSelectTypeConfigCmd)
-	if utils.CheckSlurmStatus(output) {
+	output, err := utils.RunCommand(slurmSelectTypeConfigCmd)
+	if err != nil || utils.CheckSlurmStatus(output) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
@@ -3130,8 +3160,8 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	defer rows.Close()
 
 	pendingCmd := "squeue -t pending --noheader --format='%i %R' | tr '\n' ','"
-	pendingResult, _ := utils.RunCommand(pendingCmd)
-	if utils.CheckSlurmStatus(pendingResult) {
+	pendingResult, err := utils.RunCommand(pendingCmd)
+	if err != nil || utils.CheckSlurmStatus(pendingResult) {
 		errInfo := &errdetails.ErrorInfo{
 			Reason: "COMMAND_EXEC_FAILED",
 		}
@@ -3181,12 +3211,12 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			} else {
 				getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
 				getReasonCmd := getReasonCmdTmp + " --format='%R'"
-				reason, _ = utils.RunCommand(getReasonCmd)
-				if utils.CheckSlurmStatus(reason) {
+				reason, err = utils.RunCommand(getReasonCmd)
+				if err != nil || utils.CheckSlurmStatus(reason) {
 					errInfo := &errdetails.ErrorInfo{
 						Reason: "COMMAND_EXEC_FAILED",
 					}
-					st := status.New(codes.Internal, "slurmctld down.")
+					st := status.New(codes.Internal, "sExec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
 					return nil, st.Err()
 				}
@@ -3618,6 +3648,7 @@ func main() {
 	pb.RegisterConfigServiceServer(s, &serverConfig{})
 	pb.RegisterJobServiceServer(s, &serverJob{})
 	pb.RegisterVersionServiceServer(s, &serverVersion{})
+	pb.RegisterAppServiceServer(s, &serverAppServer{})
 
 	if err = s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
