@@ -2374,7 +2374,6 @@ func (s *serverJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 	if in.DeltaMinutes >= 0 {
 		updateTimeLimitCmd := fmt.Sprintf("scontrol update job=%d TimeLimit+=%d", in.JobId, in.DeltaMinutes)
 		result, err := utils.RunCommand(updateTimeLimitCmd)
-		fmt.Println(222, result, err, 1111)
 		if err != nil || utils.CheckSlurmStatus(result) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
@@ -2778,9 +2777,10 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	if len(pendingUserResult) != 0 {
 		pendingUserMap = utils.GetPendingMapInfo(pendingUserResult)
 	}
-
+	// logger.Infof("testttt %v %v %v", setBool, filterStates, submitUser)
 	if setBool && len(filterStates) != 0 && len(submitUser) != 0 {
 		// 新增判断逻辑 1117
+		// logger.Infof("rrrrrrrrrrrrrrrrrrrrrrrrr")
 		if len(in.Filter.Accounts) == 0 {
 			getJobInfoCmdLine = fmt.Sprintf("squeue -u %s --noheader", strings.Join(submitUser, ","))
 		} else {
@@ -3211,16 +3211,31 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			} else {
 				getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
 				getReasonCmd := getReasonCmdTmp + " --format='%R'"
-				reason, err = utils.RunCommand(getReasonCmd)
-				if err != nil || utils.CheckSlurmStatus(reason) {
+				reason, err := utils.RunCommand(getReasonCmd)
+				// if err != nil || utils.CheckSlurmStatus(reason) {
+				// 	errInfo := &errdetails.ErrorInfo{
+				// 		Reason: "COMMAND_EXEC_FAILED",
+				// 	}
+				// 	logger.Infof("33333333333333333333 err: %v", reason)
+				// 	logger.Infof("11111111111111122222 jobid: %v", jobId)
+				// 	st := status.New(codes.Internal, "sExec command failed or slurmctld down.")
+				// 	st, _ = st.WithDetails(errInfo)
+				// 	return nil, st.Err()
+				// }
+
+				if utils.CheckSlurmStatus(reason) {
 					errInfo := &errdetails.ErrorInfo{
-						Reason: "COMMAND_EXEC_FAILED",
+						Reason: "SLURMCTLD_FAILED",
 					}
-					st := status.New(codes.Internal, "sExec command failed or slurmctld down.")
+					st := status.New(codes.Internal, "slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
 					return nil, st.Err()
 				}
-			} // 这里还要补充下逻辑
+
+				if err != nil {
+					continue // 一般是数据库中有数据但是squeue中没有数据导致执行命令行失败
+				}
+			}
 
 			if state == 0 {
 				cpusAlloc = 0
