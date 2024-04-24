@@ -3205,16 +3205,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
 				getReasonCmd := getReasonCmdTmp + " --format='%R'"
 				reason, err := utils.RunCommand(getReasonCmd)
-				// if err != nil || utils.CheckSlurmStatus(reason) {
-				// 	errInfo := &errdetails.ErrorInfo{
-				// 		Reason: "COMMAND_EXEC_FAILED",
-				// 	}
-				// 	logger.Infof("33333333333333333333 err: %v", reason)
-				// 	logger.Infof("11111111111111122222 jobid: %v", jobId)
-				// 	st := status.New(codes.Internal, "sExec command failed or slurmctld down.")
-				// 	st, _ = st.WithDetails(errInfo)
-				// 	return nil, st.Err()
-				// }
 
 				if utils.CheckSlurmStatus(reason) {
 					errInfo := &errdetails.ErrorInfo{
