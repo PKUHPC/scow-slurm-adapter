@@ -1789,7 +1789,7 @@ func (s *serverConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				errInfo := &errdetails.ErrorInfo{
 					Reason: "COMMAND_EXEC_FAILED",
 				}
-				st := status.New(codes.Internal, "slurmctld down.")
+				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
 				return nil, st.Err()
 			}
@@ -2029,7 +2029,6 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
 		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 		result, err := utils.RunCommand(fullCmd) // 状态
-		// fmt.Println(result, 111111)
 		if err != nil || utils.CheckSlurmStatus(result) {
 			errInfo := &errdetails.ErrorInfo{
 				Reason: "COMMAND_EXEC_FAILED",
@@ -2039,7 +2038,6 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			return nil, st.Err()
 		}
 
-		// 改bug
 		partitionElements := strings.Split(result, ",")
 		// 解析每个元素
 		for _, partitionElement := range partitionElements {
@@ -2773,14 +2771,11 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		st, _ = st.WithDetails(errInfo)
 		return nil, st.Err()
 	}
-	// logger.Infof("error %v ", err)
 	if len(pendingUserResult) != 0 {
 		pendingUserMap = utils.GetPendingMapInfo(pendingUserResult)
 	}
-	// logger.Infof("testttt %v %v %v", setBool, filterStates, submitUser)
 	if setBool && len(filterStates) != 0 && len(submitUser) != 0 {
 		// 新增判断逻辑 1117
-		// logger.Infof("rrrrrrrrrrrrrrrrrrrrrrrrr")
 		if len(in.Filter.Accounts) == 0 {
 			getJobInfoCmdLine = fmt.Sprintf("squeue -u %s --noheader", strings.Join(submitUser, ","))
 		} else {
@@ -2816,8 +2811,6 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			var singerJobtimeLimitMinutes int64
 			if len(strings.Split(v, " ")) == 17 {
 				singerJobInfo := strings.Split(v, " ")
-				// logger.Infof("RUNNING JOBS List %v ", singerJobInfo)
-				// logger.Infof("RUNNING JOBS List LENGTH %v ", len(singerJobInfo))
 				singerJobAccount := singerJobInfo[1]
 				singerJobUserName := singerJobInfo[13]
 				singerJobJobId, _ := strconv.Atoi(singerJobInfo[2])
@@ -3233,6 +3226,7 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 
 				if err != nil {
+					logrus.Infof("Received err job info: %v", jobId)
 					continue // 一般是数据库中有数据但是squeue中没有数据导致执行命令行失败
 				}
 			}
@@ -3259,6 +3253,23 @@ func (s *serverJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 			}
 		} else if state == 1 {
+			// 新加逻辑
+			getReasonCmdTmp := fmt.Sprintf("squeue -j %d --noheader ", jobId)
+			getReasonCmd := getReasonCmdTmp + " --format='%R'"
+			reason, err := utils.RunCommand(getReasonCmd)
+			if utils.CheckSlurmStatus(reason) {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "SLURMCTLD_FAILED",
+				}
+				st := status.New(codes.Internal, "slurmctld down.")
+				st, _ = st.WithDetails(errInfo)
+				return nil, st.Err()
+			}
+
+			if err != nil {
+				continue // 一般是数据库中有数据但是squeue中没有数据导致执行命令行失败
+			}
+
 			reason = "Running"
 			cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
 			memAllocMb = int64(utils.GetResInfoNumFromTresInfo(tresAlloc, memTresId))
@@ -3485,7 +3496,8 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	}
 	scriptString += "#SBATCH " + "-J " + in.JobName + "\n"
 	scriptString += "#SBATCH " + "--nodes=" + strconv.Itoa(int(in.NodeCount)) + "\n"
-	scriptString += "#SBATCH " + "-c " + strconv.Itoa(int(in.CoreCount)) + "\n"
+	// scriptString += "#SBATCH " + "-c " + strconv.Itoa(int(in.CoreCount)) + "\n"
+	scriptString += "#SBATCH " + "--ntasks-per-node=" + strconv.Itoa(int(in.CoreCount)) + "\n"
 	if in.TimeLimitMinutes != nil {
 		scriptString += "#SBATCH " + "--time=" + strconv.Itoa(int(*in.TimeLimitMinutes)) + "\n"
 	}
@@ -3613,6 +3625,7 @@ func main() {
 	var (
 		err error
 	)
+	os.Setenv("SLURM_TIME_FORMAT", "standard") // 新加slurm环境变量
 	// 连接数据库
 	dbConfig := utils.DatabaseConfig()
 	db, err = sql.Open("mysql", dbConfig)

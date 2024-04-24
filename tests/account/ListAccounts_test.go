@@ -21,7 +21,7 @@ func TestListAccounts(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.ListAccountsRequest{
-		UserId: "root",
+		UserId: "demo_admin",
 	}
 	res, err := client.ListAccounts(context.Background(), req)
 	if err != nil {
