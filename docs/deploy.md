@@ -102,6 +102,7 @@ service:
 # slurm 默认Qos设置
 slurm:
   defaultqos: normal                                      # 指定slurm默认qos信息
+  # slurmpath: /nfs/apps/slurm                            # 若slurm是自定义安装路径则需要再此进行路径的配置
 
 # module profile文件路径
 modulepath:
