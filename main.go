@@ -3486,8 +3486,7 @@ func (s *serverJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 	}
 	scriptString += "#SBATCH " + "-J " + in.JobName + "\n"
 	scriptString += "#SBATCH " + "--nodes=" + strconv.Itoa(int(in.NodeCount)) + "\n"
-	// scriptString += "#SBATCH " + "-c " + strconv.Itoa(int(in.CoreCount)) + "\n"
-	scriptString += "#SBATCH " + "--ntasks-per-node=" + strconv.Itoa(int(in.CoreCount)) + "\n"
+	scriptString += "#SBATCH " + "-c " + strconv.Itoa(int(in.CoreCount)) + "\n"
 	if in.TimeLimitMinutes != nil {
 		scriptString += "#SBATCH " + "--time=" + strconv.Itoa(int(*in.TimeLimitMinutes)) + "\n"
 	}
