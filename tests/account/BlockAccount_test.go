@@ -19,9 +19,12 @@ func TestBlockAccount(t *testing.T) {
 	defer conn.Close()
 	client := pb.NewAccountServiceClient(conn)
 
+	// var list []string
 	// Call the Add RPC with test data
+	// list = append(list, "compute")
 	req := &pb.BlockAccountRequest{
 		AccountName: "a_admin",
+		// BlockedPartitions: list,
 	}
 	_, err = client.BlockAccount(context.Background(), req)
 	if err != nil {

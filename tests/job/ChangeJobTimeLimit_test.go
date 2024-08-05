@@ -21,8 +21,8 @@ func TestChangeJobTimeLimit(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.ChangeJobTimeLimitRequest{
-		JobId: 1385141,
-		DeltaMinutes: 10,
+		JobId: 138549,
+		DeltaMinutes: 1,
 	}
 	_, err = client.ChangeJobTimeLimit(context.Background(), req)
 	if err != nil {

@@ -10,6 +10,9 @@ import (
 )
 
 func TestUnblockAccount(t *testing.T) {
+	// var (
+	// 	unBlockPartitions []string
+	// )
 
 	// Set up a connection to the server
 	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
@@ -19,9 +22,12 @@ func TestUnblockAccount(t *testing.T) {
 	defer conn.Close()
 	client := pb.NewAccountServiceClient(conn)
 
+	// unBlockPartitions = append(unBlockPartitions, "")
+
 	// Call the Add RPC with test data
 	req := &pb.UnblockAccountRequest{
-		AccountName: "w_admin",
+		AccountName:         "a_admin",
+		// UnblockedPartitions: unBlockPartitions,
 	}
 	_, err = client.UnblockAccount(context.Background(), req)
 	if err != nil {

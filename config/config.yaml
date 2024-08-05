@@ -19,4 +19,8 @@ slurm:
 # module profile文件路径
 modulepath:
   path: /lustre/software/module/5.2.0/init/profile.sh
-  
+
+# 计算分区描述
+partitiondesc:
+  - name: compute      # 这个是计算分区名
+    desc: "这是普通的cpu计算分区"  # 这是描述

@@ -12,7 +12,7 @@ import (
 func TestCancelJob(t *testing.T) {
 
 	// Set up a connection to the server
-	conn, err := grpc.Dial("localhost:8999", grpc.WithInsecure())
+	conn, err := grpc.Dial("localhost:8972", grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("did not connect: %v", err)
 	}
@@ -21,8 +21,8 @@ func TestCancelJob(t *testing.T) {
 
 	// Call the Add RPC with test data
 	req := &pb.CancelJobRequest{
-		UserId: "test03",
-		JobId:  1358,
+		UserId: "test02",
+		JobId:  138548,
 	}
 	_, err = client.CancelJob(context.Background(), req)
 	if err != nil {

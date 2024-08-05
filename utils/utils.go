@@ -43,11 +43,17 @@ type Modulepath struct {
 	Path string `yaml:"path"`
 }
 
+type PartitionDesc struct {
+	Name string `yaml:"name"`
+	Desc string `yaml:"desc"`
+}
+
 type Config struct {
-	MySQLConfig MySQLConfig `yaml:"mysql"`
-	Service     Service     `yaml:"service"`
-	Slurm       Slurm       `yaml:"slurm"`
-	Modulepath  Modulepath  `yaml:"modulepath"`
+	MySQLConfig   MySQLConfig     `yaml:"mysql"`
+	Service       Service         `yaml:"service"`
+	Slurm         Slurm           `yaml:"slurm"`
+	Modulepath    Modulepath      `yaml:"modulepath"`
+	PartitionDesc []PartitionDesc `yaml:"partitiondesc"`
 }
 
 var (
@@ -90,16 +96,12 @@ func ExecuteShellCommand(command string) int {
 
 // 简单执行shell命令函数
 func RunCommand(command string) (string, error) {
-	// cmd := exec.Command("bash", "-c", command)
-	// output, err := cmd.CombinedOutput()
-	// if err != nil {
-	// 	return "", err
-	// }
-	// return strings.TrimSpace(string(output)), nil
+	var (
+		output bytes.Buffer
+	)
 	cmd := exec.Command("bash", "-c", command)
 
 	// 创建一个 bytes.Buffer 用于捕获输出
-	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
@@ -123,18 +125,19 @@ func DatabaseConfig() string {
 	port := config.MySQLConfig.Port
 	databaseencode := config.MySQLConfig.DatabaseEncode
 
-	// dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, "latin1")
 	dbConfig := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s", userName, passWord, host, port, dbName, databaseencode)
 	return dbConfig
 }
 
 // 获取全系统计算分区信息
-func GetPatitionInfo() ([]string, error) {
+func GetPartitionInfo() ([]string, error) {
+	var (
+		output bytes.Buffer
+	)
 	shellCmd := "scontrol show partition| grep PartitionName=| awk -F'=' '{print $2}'| tr '\n' ','"
 	cmd := exec.Command("bash", "-c", shellCmd)
 
 	// 创建一个 bytes.Buffer 用于捕获输出
-	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
@@ -169,7 +172,7 @@ func ChangeState(stateInit int) string {
 	case 1:
 		stateString = "RUNNING"
 	case 2:
-		stateString = "SUSPEND"
+		stateString = "SUSPENDED"
 	case 3:
 		stateString = "COMPLETED"
 	case 4:
@@ -196,7 +199,7 @@ func GetStateId(stateString string) int {
 		state = 0
 	case "RUNNING":
 		state = 1
-	case "SUSPEND":
+	case "SUSPENDED":
 		state = 2
 	case "COMPLETED":
 		state = 3
@@ -215,7 +218,9 @@ func GetStateId(stateString string) int {
 }
 
 func GetTimeLimit(timeLimit string) int64 {
-	var timeLimitMinutes int64
+	var (
+		timeLimitMinutes int64
+	)
 	if strings.Contains(timeLimit, "-") {
 		timeLimitMinutesList := strings.Split(timeLimit, "-")
 		day, _ := strconv.Atoi(timeLimitMinutesList[0])
@@ -328,31 +333,23 @@ func GetUserNameByUid(uid int) (string, error) {
 
 // 判断字符串中是否包含大写字母
 func CheckAccountOrUserStrings(s string) bool {
-
 	pattern := "^[a-z0-9_]+$"
 	// 编译正则表达式
 	reg := regexp.MustCompile(pattern)
 	// 使用正则表达式判断字符串是否符合模式
 	if reg.MatchString(s) {
 		return true
-		// fmt.Println("字符串符合要求")
 	} else {
-		// fmt.Println("字符串不符合要求")
 		return false
 	}
-
-	// for _, char := range s {
-	// 	if unicode.IsUpper(char) {
-	// 		return true
-	// 	}
-	// }
-	// return false
 }
 
 // 本地提交作业函数
 func LocalSubmitJob(scriptString string, username string) (string, error) {
+	var (
+		output bytes.Buffer
+	)
 	// 提交作业命令行
-	// cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch'", username)
 	config := ParseConfig(DefaultConfigPath)
 	slurmpath := config.Slurm.Slurmpath
 	if slurmpath == "" {
@@ -364,7 +361,6 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 	cmd := exec.Command("bash", "-c", cmdLine)
 
 	// 创建一个 bytes.Buffer 用于捕获输出
-	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
@@ -381,6 +377,9 @@ func LocalSubmitJob(scriptString string, username string) (string, error) {
 }
 
 func LocalFileSubmitJob(filePath string, username string) (string, error) {
+	var (
+		output bytes.Buffer
+	)
 	config := ParseConfig(DefaultConfigPath)
 	slurmpath := config.Slurm.Slurmpath
 	if slurmpath == "" {
@@ -388,10 +387,7 @@ func LocalFileSubmitJob(filePath string, username string) (string, error) {
 		slurmpath = "/usr"
 	}
 	cmdLine := fmt.Sprintf("su - %s -c '%s/bin/sbatch %s'", username, slurmpath, filePath)
-	// cmdLine := fmt.Sprintf("su - %s -c '/usr/bin/sbatch %s'", username, filePath)
 	cmd := exec.Command("bash", "-c", cmdLine)
-	// 创建一个 bytes.Buffer 用于捕获输出
-	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
@@ -420,6 +416,9 @@ func GetUserHomedir(username string) (string, error) {
 
 // 取消作业函数
 func LocalCancelJob(username string, jobId int) (string, error) {
+	var (
+		output bytes.Buffer
+	)
 	config := ParseConfig(DefaultConfigPath)
 	slurmpath := config.Slurm.Slurmpath
 	if slurmpath == "" {
@@ -430,7 +429,6 @@ func LocalCancelJob(username string, jobId int) (string, error) {
 	// cmdLine := fmt.Sprintf("su - %s -c 'scancel %d'", username, jobId)
 	cmd := exec.Command("bash", "-c", cmdLine)
 	// 创建一个 bytes.Buffer 用于捕获输出
-	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
@@ -501,7 +499,9 @@ func IsSubSet(arr1, arr2 []string) bool {
 }
 
 func GetRunningElapsedSeconds(timeString string) int64 {
-	var elapsedSeconds int64
+	var (
+		elapsedSeconds int64
+	)
 	if strings.Contains(timeString, "-") {
 		ElapsedSecondsList := strings.Split(timeString, "-")
 		day, _ := strconv.Atoi(ElapsedSecondsList[0])
@@ -578,4 +578,17 @@ func CheckSlurmStatus(result string) bool {
 	} else {
 		return false
 	}
+}
+
+func ExtractValue(input, key string) string {
+	// 构建匹配键值对的正则表达式
+	pattern := fmt.Sprintf("%s=([^\\s]+)", key)
+	re := regexp.MustCompile(pattern)
+
+	// 查找第一个匹配项
+	match := re.FindStringSubmatch(input)
+	if len(match) >= 2 {
+		return match[1]
+	}
+	return ""
 }
