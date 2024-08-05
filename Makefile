@@ -1,7 +1,7 @@
 ARCH ?= amd64
 
 protos: 
-	buf generate --template buf.gen.yaml https://github.com/PKUHPC/scow-scheduler-adapter-interface.git#subdir=protos,tag=feat-get-nodes-info
+	buf generate --template buf.gen.yaml https://github.com/PKUHPC/scow-scheduler-adapter-interface.git#subdir=protos,tag=v1.6.0
 
 run: 
 	go run *.go 
