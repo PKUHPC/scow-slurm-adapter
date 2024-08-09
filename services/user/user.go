@@ -576,3 +576,57 @@ func (s *ServerUser) QueryUserInAccountBlockStatus(ctx context.Context, in *pb.Q
 	}
 	return &pb.QueryUserInAccountBlockStatusResponse{Blocked: true}, nil
 }
+
+func (s *ServerUser) DeleteUser(ctx context.Context, in *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
+	// 检查用户是不是存在
+	var (
+		userName string
+	)
+	userSqlConfig := "SELECT name FROM user_table WHERE name = ? AND deleted = 0"
+	err := caller.DB.QueryRow(userSqlConfig, in.UserId).Scan(&userName)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "USER_NOT_FOUND",
+		}
+		message := fmt.Sprintf("%s does not exists.", in.UserId)
+		st := status.New(codes.NotFound, message)
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	// 作业的判断
+	userRunningJobInfoCmd := fmt.Sprintf("squeue --noheader -A %s", in.UserId)
+	runningJobInfo, err := utils.RunCommand(userRunningJobInfoCmd)
+
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "CMD_EXECUTE_FAILED",
+		}
+		st := status.New(codes.NotFound, err.Error())
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+
+	if len(runningJobInfo) == 0 {
+		deleteUserCmd := fmt.Sprintf("sacctmgr -i delete user name=%s", in.UserId)
+		_, err = utils.RunCommand(deleteUserCmd)
+		if err != nil {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "CMD_EXECUTE_FAILED",
+			}
+			st := status.New(codes.NotFound, err.Error())
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		// 执行成功直接返回
+		return &pb.DeleteUserResponse{}, nil
+	} else {
+		// 不能删
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "HAVE_RUNNING_JOBS",
+		}
+		st := status.New(codes.NotFound, "Exist running jobs.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+}

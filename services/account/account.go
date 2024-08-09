@@ -600,6 +600,60 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	return &pb.QueryAccountBlockStatusResponse{Blocked: false}, nil
 }
 
+// 删除账户
+func (s *ServerAccount) DeleteAccount(ctx context.Context, in *pb.DeleteAccountRequest) (*pb.DeleteAccountResponse, error) {
+	var (
+		acctName string
+	)
+	// 检查账户名是否在slurm中
+	acctSqlConfig := "SELECT name FROM acct_table WHERE name = ? AND deleted = 0"
+	err := caller.DB.QueryRow(acctSqlConfig, in.AccountName).Scan(&acctName)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "ACCOUNT_NOT_FOUND",
+		}
+		message := fmt.Sprintf("%s does not exists.", in.AccountName)
+		st := status.New(codes.NotFound, message)
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	// 作业的判断
+	accountRunningJobInfoCmd := fmt.Sprintf("squeue --noheader -A %s", in.AccountName)
+	runningJobInfo, err := utils.RunCommand(accountRunningJobInfoCmd)
+	if err != nil {
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "CMD_EXECUTE_FAILED",
+		}
+		st := status.New(codes.NotFound, err.Error())
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+	if len(runningJobInfo) == 0 {
+		// 可以删
+		// 具体的删除操作
+		deleteAccountCmd := fmt.Sprintf("sacctmgr -i delete account name=%s", in.AccountName)
+		_, err = utils.RunCommand(deleteAccountCmd)
+		if err != nil {
+			// 删除失败
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "CMD_EXECUTE_FAILED",
+			}
+			st := status.New(codes.NotFound, err.Error())
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		return &pb.DeleteAccountResponse{}, nil
+	} else {
+		// 不能删
+		errInfo := &errdetails.ErrorInfo{
+			Reason: "HAVE_RUNNING_JOBS",
+		}
+		st := status.New(codes.NotFound, "Exist running jobs.")
+		st, _ = st.WithDetails(errInfo)
+		return nil, st.Err()
+	}
+}
+
 // func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.QueryAccountBlockStatusRequest) (*pb.QueryAccountBlockStatusResponse, error) {
 // 	var (
 // 		acctName                 string
