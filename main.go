@@ -2561,7 +2561,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 
 			elapsedSeconds = time.Now().Unix() - startTime
 
-			if output == "cons_tres" || output == "cons_res" {
+			if output == "None" {
 				if len(gpuIdList) == 0 {
 					gpusAlloc = 0
 				} else {
