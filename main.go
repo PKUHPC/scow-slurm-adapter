@@ -2203,7 +2203,8 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			if runningJobNum != 0 {
 				// 获取正在使用的GPU卡数
 				useGpuCardstr := fmt.Sprintf("squeue -p %s -t r ", v)
-				useGpuCardCmd := useGpuCardstr + " " + " --format='%b' --noheader | awk -F':' '{print $3}' | awk '{sum+=$1} END {print sum}'"
+				//useGpuCardCmd := useGpuCardstr + " " + " --format='%b' --noheader | awk -F':' '{print $3}' | awk '{sum+=$1} END {print sum}'"
+				useGpuCardCmd := useGpuCardstr + " " + " --format='%b %D'|awk -F: '{print $2}'|awk '{ sum += $1 * $2 } END { print sum }'"
 				useGpuCardResult, err := utils.RunCommand(useGpuCardCmd)
 				if err != nil || utils.CheckSlurmStatus(useGpuCardResult) {
 					errInfo := &errdetails.ErrorInfo{
