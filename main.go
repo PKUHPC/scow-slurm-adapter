@@ -2567,7 +2567,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 				} else {
 					getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 					GPUsPernode, _ := utils.RunCommand(getGPUsPernodeCmd)
-					int32GPUsPernode := int32(strconv.Atoi(GPUsPernode[0]))
+					int32GPUsPernode := int32(strconv.Atoi(GPUsPernode))
 					gpusAlloc = int32GPUsPernode * nodeReq
 					//gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
 				}
@@ -2605,7 +2605,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		//}
 		getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 		GPUsPernode, _ := utils.RunCommand(getGPUsPernodeCmd)
-		int32GPUsPernode := int32(strconv.Atoi(GPUsPernode[0]))
+		int32GPUsPernode := int32(strconv.Atoi(GPUsPernode))
 		gpusAlloc = int32GPUsPernode * nodeReq
 	} else {
 		reason = "end of job" // 结束状态的作业信息
