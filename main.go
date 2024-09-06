@@ -2567,7 +2567,16 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 				} else {
 					getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 					GPUsPernode, _ := utils.RunCommand(getGPUsPernodeCmd)
-					int32GPUsPernode := int32(strconv.Atoi(GPUsPernode))
+					// 将字符串转换为 int
+					intGPUsPernode, err := strconv.Atoi(GPUsPernode)
+					if err != nil {
+    					// 处理转换错误
+    					fmt.Println("转换错误:", err)
+    					return // 或者其他适当的错误处理
+					}	
+					// 将 int 转换为 int32
+					int32GPUsPernode := int32(intGPUsPernode)
+					// 计算分配的 GPU 数量
 					gpusAlloc = int32GPUsPernode * nodeReq
 					//gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
 				}
@@ -2605,7 +2614,16 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		//}
 		getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 		GPUsPernode, _ := utils.RunCommand(getGPUsPernodeCmd)
-		int32GPUsPernode := int32(strconv.Atoi(GPUsPernode))
+		// 将字符串转换为 int
+		intGPUsPernode, err := strconv.Atoi(GPUsPernode)
+		if err != nil {
+    		// 处理转换错误
+    		fmt.Println("转换错误:", err)
+    		return // 或者其他适当的错误处理
+		}	
+		// 将 int 转换为 int32
+		int32GPUsPernode := int32(intGPUsPernode)
+		// 计算分配的 GPU 数量
 		gpusAlloc = int32GPUsPernode * nodeReq
 	} else {
 		reason = "end of job" // 结束状态的作业信息
