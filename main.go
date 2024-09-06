@@ -2565,7 +2565,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 				if len(gpuIdList) == 0 {
 					gpusAlloc = 0
 				} else {
-					getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", JobId)
+					getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 					GPUsPernode := int32(utils.RunCommand(getGPUsPernodeCmd))
 					gpusAlloc = GPUsPernode * nodeReq
 					//gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
@@ -2602,7 +2602,7 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		//} else {
 		//	gpusAlloc = 0
 		//}
-		getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", JobId)
+		getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", jobId)
 		GPUsPernode := int32(utils.RunCommand(getGPUsPernodeCmd))
 		gpusAlloc = GPUsPernode * nodeReq
 	} else {
