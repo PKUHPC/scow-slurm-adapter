@@ -1,11 +1,9 @@
 package config
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"scow-slurm-adapter/caller"
-	pb "scow-slurm-adapter/gen/go"
-	"scow-slurm-adapter/utils"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +12,9 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"scow-slurm-adapter/caller"
+	pb "scow-slurm-adapter/gen/go"
+	"scow-slurm-adapter/utils"
 )
 
 type ServerConfig struct {
@@ -731,7 +732,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
-func extractNodeInfo(info string) (*pb.NodeInfo, error) {
+func extractNodeInfo(info string) *pb.NodeInfo {
 	var (
 		partitionList []string
 		totalGpusInt  int
@@ -799,7 +800,7 @@ func extractNodeInfo(info string) (*pb.NodeInfo, error) {
 		GpuCount:          uint32(totalGpusInt),
 		AllocGpuCount:     uint32(allocGpusInt),
 		IdleGpuCount:      uint32(totalGpusInt) - uint32(allocGpusInt),
-	}, nil
+	}
 }
 
 func getNodeInfo(node string, wg *sync.WaitGroup, nodeChan chan<- *pb.NodeInfo, errChan chan<- error) {
@@ -817,20 +818,15 @@ func getNodeInfo(node string, wg *sync.WaitGroup, nodeChan chan<- *pb.NodeInfo, 
 		return
 	}
 
-	nodeInfo, err := extractNodeInfo(info)
-	if err != nil {
-		errChan <- err
-		return
-	}
+	nodeInfo := extractNodeInfo(info)
 
 	nodeChan <- nodeInfo
 }
 
 func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetClusterNodesInfoRequest) (*pb.GetClusterNodesInfoResponse, error) {
 	var (
-		wg            sync.WaitGroup
-		nodesInfo     []*pb.NodeInfo
-		nodesInfoList []string
+		wg        sync.WaitGroup
+		nodesInfo []*pb.NodeInfo
 	)
 	caller.Logger.Infof("Received request GetClusterNodesInfo: %v", in)
 	nodeChan := make(chan *pb.NodeInfo, len(in.NodeNames))
@@ -838,7 +834,7 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 
 	if len(in.NodeNames) == 0 {
 		// 获取集群中全部节点的信息
-		getNodesInfoCmd := "scontrol show nodes --oneliner | grep Partitions | awk '{print $1}' | awk -F= '{print $2}' | tr '\n' ';'" // 获取全部计算节点主机名
+		getNodesInfoCmd := "scontrol show nodes --oneliner | grep Partitions" // 获取全部计算节点主机名
 		output, err := utils.RunCommand(getNodesInfoCmd)
 		if err != nil {
 			errInfo := &errdetails.ErrorInfo{
@@ -848,17 +844,22 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 			st, _ = st.WithDetails(errInfo)
 			return nil, st.Err()
 		}
-		nodesInfoList = strings.Split(output, ";")
-		nodesInfoList = nodesInfoList[:len(nodesInfoList)-1]
-	} else {
-		nodesInfoList = in.NodeNames
+		// 按行分割输出
+		scanner := bufio.NewScanner(strings.NewReader(output))
+		for scanner.Scan() {
+			line := scanner.Text()
+			nodeInfo := extractNodeInfo(line)
+			nodesInfo = append(nodesInfo, nodeInfo)
+		}
+		caller.Logger.Infof("GetClusterNodesInfoResponse: %v", nodesInfo)
+		return &pb.GetClusterNodesInfoResponse{Nodes: nodesInfo}, nil
 	}
 
-	for _, node := range nodesInfoList {
-		node1 := node
+	for _, node := range in.NodeNames {
+		nodeName := node
 		wg.Add(1)
 		go func() {
-			getNodeInfo(node1, &wg, chan<- *pb.NodeInfo(nodeChan), chan<- error(errChan))
+			getNodeInfo(nodeName, &wg, chan<- *pb.NodeInfo(nodeChan), chan<- error(errChan))
 		}()
 	}
 
@@ -879,6 +880,7 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 		}
 	default:
 	}
+	caller.Logger.Infof("GetClusterNodesInfoResponse: %v", nodesInfo)
 	return &pb.GetClusterNodesInfoResponse{Nodes: nodesInfo}, nil
 }
 
