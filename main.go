@@ -2592,16 +2592,19 @@ func (s *serverJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		// stderrPath = StderrPath
 		// stdoutPath = StdoutPath
 
-		if output == "cons_tres" || output == "cons_res" {
-			if len(gpuIdList) == 0 {
-				gpusAlloc = 0
-			} else {
-				// 从tres_alloc中解析出gpu对应的卡数
-				gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
-			}
-		} else {
-			gpusAlloc = 0
-		}
+		//if output == "cons_tres" || output == "cons_res" {
+		//	if len(gpuIdList) == 0 {
+		//		gpusAlloc = 0
+		//	} else {
+		//		// 从tres_alloc中解析出gpu对应的卡数
+		//		gpusAlloc = utils.GetGpuAllocsFromGpuIdList(tresAlloc, gpuIdList)
+		//	}
+		//} else {
+		//	gpusAlloc = 0
+		//}
+		getGPUsPernodeCmd := fmt.Sprintf("scontrol show job %d|grep gpu|awk -F: '{print $NF}'", JobId)
+		GPUsPernode := int32(utils.RunCommand(getGPUsPernodeCmd))
+		gpusAlloc = GPUsPernode * nodeReq
 	} else {
 		reason = "end of job" // 结束状态的作业信息
 		cpusAlloc = int32(utils.GetResInfoNumFromTresInfo(tresAlloc, cpuTresId))
