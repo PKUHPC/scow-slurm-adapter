@@ -2025,7 +2025,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		var idleNodes int
 		var noAvailableNodes int
 
-		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
+		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s -N --noheader", v)
 		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
 		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 		result, err := utils.RunCommand(fullCmd) // 状态
