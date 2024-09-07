@@ -2030,7 +2030,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		//fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 
 		//sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++'|grep '^MX'| tr '\n' ','
-		getPartitionStatusCmd := fmt.Sprintf("|grep '^%s'|awk '!seen[$NF]++'| tr '\n' ','", v)
+		getPartitionStatusCmd := fmt.Sprintf("|grep '^%s'|awk '!seen[$NF]++{print $1,$2,$3,$4,$5,$6,$7}'| tr '\n' ','", v)
 		fullCmd := "sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'" + getPartitionStatusCmd
 
 		result, err := utils.RunCommand(fullCmd) // 状态
