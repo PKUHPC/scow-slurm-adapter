@@ -2025,13 +2025,13 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		var idleNodes int
 		var noAvailableNodes int
 
-		//getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s -N --noheader", v)
+		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
 		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
-		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
+		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 
 		//sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++'|grep '^MX'| tr '\n' ','
-		getPartitionStatusCmd := fmt.Sprintf("|grep '^%s'| tr '\n' ','", v)
-		fullCmd := "sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++'" + getPartitionStatusCmd
+		//getPartitionStatusCmd := fmt.Sprintf("|grep '^%s'| tr '\n' ','", v)
+		//fullCmd := "sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++'" + getPartitionStatusCmd
 
 		result, err := utils.RunCommand(fullCmd) // 状态
 		if err != nil || utils.CheckSlurmStatus(result) {
