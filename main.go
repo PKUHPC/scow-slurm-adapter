@@ -2031,7 +2031,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 
 		//sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++{print $1,$2,$3,$4,$5,$6,$7}' |grep '^MX'| tr '\n' ','
 		getPartitionStatusCmd := fmt.Sprintf("|grep '^%s'| tr '\n' ','", v)
-		fullCmd := "sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++{print $1,$2,$3,$4,$5,$6,$7}'" + getPartitionStatusCmd
+		fullCmd := "sinfo -N --nohead --format='%P %c %C %G %a %D %F %n'|awk '!seen[$NF]++'|awk '{print $1,$2,$3,$4,$5,$6,$7}'" + getPartitionStatusCmd
 
 		result, err := utils.RunCommand(fullCmd) // 状态
 		if err != nil || utils.CheckSlurmStatus(result) {
