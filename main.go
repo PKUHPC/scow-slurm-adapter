@@ -2026,7 +2026,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		var noAvailableNodes int
 
 		// sinfo -p %s --noheader --format='%P %c %C %G %a %D %F'| tr '\n' ','
-		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s -N --noheader", v)
+		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
 		// fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
 		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
 
