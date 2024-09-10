@@ -9,7 +9,6 @@ import (
 
 	"scow-slurm-adapter/caller"
 	pb "scow-slurm-adapter/gen/go"
-
 	"scow-slurm-adapter/services/account"
 	"scow-slurm-adapter/services/app"
 	"scow-slurm-adapter/services/config"
