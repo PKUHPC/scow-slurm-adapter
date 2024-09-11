@@ -40,6 +40,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 查系统中的所有qos
@@ -51,6 +52,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -62,6 +64,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		qosList = append(qosList, qosName)
@@ -73,6 +76,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// fmt.Println(caller.ConfigValue.PartitionDesc, 112222)
@@ -108,6 +112,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				totalMemsTmp, err = utils.RunCommand(totalMemsCmd)
@@ -117,6 +122,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				totalNodes, err = utils.RunCommand(totalNodesCmd)
@@ -126,6 +132,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 
@@ -141,6 +148,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				totalMemsTmp, err = utils.RunCommand(totalMemsCmd)
@@ -150,6 +158,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				totalNodes, err = utils.RunCommand(totalNodesCmd)
@@ -159,6 +168,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 			}
@@ -188,6 +198,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld dwon.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
@@ -199,6 +210,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
@@ -212,6 +224,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			nodeArray := strings.Split(nodeOutput, ",")
@@ -225,6 +238,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
@@ -236,6 +250,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 
@@ -250,6 +265,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 					return nil, st.Err()
 				}
 
@@ -262,6 +278,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 			return nil, st.Err()
 		}
 
@@ -274,6 +291,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		nodeArray := strings.Split(nodeOutput, ",")
@@ -288,6 +306,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
@@ -299,6 +318,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			if gpusOutput == "Gres=(null)" {
@@ -317,6 +337,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			if gpusOutput == "Gres=(null)" {
@@ -334,6 +355,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		qosArray := strings.Split(qosOutput, "=")
@@ -348,6 +370,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 			return nil, st.Err()
 		}
 
@@ -377,6 +400,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			Comment: &comment,
 		})
 	}
+	caller.Logger.Tracef("GetClusterConfig: %v", &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"})
 	return &pb.GetClusterConfigResponse{Partitions: parts, SchedulerName: "slurm"}, nil
 }
 
@@ -401,6 +425,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		}
 		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取集群名
@@ -416,6 +441,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		message := fmt.Sprintf("%s does not exists.", in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 判断用户是否存在
@@ -428,6 +454,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		message := fmt.Sprintf("%s does not exists.", in.UserId)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 检查账户和用户之间是否存在关联关系
@@ -440,6 +467,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		message := fmt.Sprintf("%s and %s assocation is not exists!", in.UserId, in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 查系统中的所有qos
@@ -451,6 +479,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -462,6 +491,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		qosList = append(qosList, qosName)
@@ -473,6 +503,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 关联关系存在的情况下去找用户
@@ -483,6 +514,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	for _, partition := range partitions {
@@ -500,6 +532,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		index := arrays.Contains(strings.Split(accouts, ","), in.AccountName)
@@ -512,6 +545,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			totalCpuInt, _ = strconv.Atoi(totalCpus)
@@ -523,6 +557,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
@@ -535,6 +570,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			if output != "" {
@@ -547,6 +583,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 					return nil, st.Err()
 				}
 
@@ -571,6 +608,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				nodeArray := strings.Split(nodeOutput, ",")
@@ -584,6 +622,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 						}
 						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 						st, _ = st.WithDetails(errInfo)
+						caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 						return nil, st.Err()
 					}
 					nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
@@ -595,6 +634,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 						}
 						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 						st, _ = st.WithDetails(errInfo)
+						caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 						return nil, st.Err()
 					}
 					nodeMem, _ := strconv.Atoi(memOutput)
@@ -608,6 +648,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 						}
 						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 						st, _ = st.WithDetails(errInfo)
+						caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 						return nil, st.Err()
 					}
 					nodeMem, _ := strconv.Atoi(memOutput)
@@ -623,6 +664,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			nodeArray := strings.Split(nodeOutput, ",")
@@ -637,6 +679,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
@@ -648,6 +691,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				if gpusOutput == "Gres=(null)" {
@@ -666,6 +710,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				if gpusOutput == "Gres=(null)" {
@@ -683,6 +728,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			qosArray := strings.Split(qosOutput, "=")
@@ -697,6 +743,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
 				return nil, st.Err()
 			}
 
@@ -729,6 +776,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 			continue
 		}
 	}
+	caller.Logger.Tracef("GetAvailablePartitions: %v", &pb.GetAvailablePartitionsResponse{Partitions: parts})
 	return &pb.GetAvailablePartitionsResponse{Partitions: parts}, nil
 }
 
@@ -842,6 +890,7 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterNodesInfo failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		// 按行分割输出
@@ -851,7 +900,7 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 			nodeInfo := extractNodeInfo(line)
 			nodesInfo = append(nodesInfo, nodeInfo)
 		}
-		caller.Logger.Infof("GetClusterNodesInfoResponse: %v", nodesInfo)
+		caller.Logger.Tracef("GetClusterNodesInfoResponse: %v", nodesInfo)
 		return &pb.GetClusterNodesInfoResponse{Nodes: nodesInfo}, nil
 	}
 
@@ -876,11 +925,12 @@ func (s *ServerConfig) GetClusterNodesInfo(ctx context.Context, in *pb.GetCluste
 	select {
 	case err := <-errChan:
 		if err != nil {
+			caller.Logger.Errorf("GetClusterNodesInfo failed: %v", err)
 			return nil, err
 		}
 	default:
 	}
-	caller.Logger.Infof("GetClusterNodesInfoResponse: %v", nodesInfo)
+	caller.Logger.Tracef("GetClusterNodesInfoResponse: %v", nodesInfo)
 	return &pb.GetClusterNodesInfoResponse{Nodes: nodesInfo}, nil
 }
 
@@ -898,6 +948,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	for _, v := range partitions {
@@ -927,6 +978,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 			return nil, st.Err()
 		}
 
@@ -982,6 +1034,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			pdJobNum, _ = strconv.Atoi(pdresult)
@@ -993,6 +1046,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			runningJobNum, _ = strconv.Atoi(runningresult)
@@ -1051,6 +1105,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			pdJobNum, _ = strconv.Atoi(pdresult)
@@ -1062,6 +1117,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				}
 				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			runningJobNum, _ = strconv.Atoi(runningResult)
@@ -1076,6 +1132,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 					}
 					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterInfo failed: %v", st.Err())
 					return nil, st.Err()
 				}
 				runningGpus, _ = strconv.Atoi(useGpuCardResult)
@@ -1131,5 +1188,6 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			}
 		}
 	}
+	caller.Logger.Tracef("GetClusterInfo: %v", &pb.GetClusterInfoResponse{ClusterName: clusterName, Partitions: parts})
 	return &pb.GetClusterInfoResponse{ClusterName: clusterName, Partitions: parts}, nil
 }

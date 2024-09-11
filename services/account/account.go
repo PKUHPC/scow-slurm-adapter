@@ -37,6 +37,7 @@ func (s *ServerAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		}
 		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("ListAccounts failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取集群名
@@ -52,6 +53,7 @@ func (s *ServerAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		message := fmt.Sprintf("%s does not exists.", in.UserId)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("ListAccounts failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 查询用户相关联的所有账户信息
@@ -63,6 +65,7 @@ func (s *ServerAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("ListAccounts failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -74,6 +77,7 @@ func (s *ServerAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("ListAccounts failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		acctList = append(acctList, assocAcct)
@@ -85,8 +89,10 @@ func (s *ServerAccount) ListAccounts(ctx context.Context, in *pb.ListAccountsReq
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("ListAccounts failed: %v", st.Err())
 		return nil, st.Err()
 	}
+	caller.Logger.Tracef("ListAccounts Response: %v", &pb.ListAccountsResponse{Accounts: acctList})
 	return &pb.ListAccountsResponse{Accounts: acctList}, nil
 }
 
@@ -106,6 +112,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 		}
 		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取系统中默认的Qos信息
@@ -121,6 +128,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			}
 			st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		// 获取系统中Qos
@@ -132,6 +140,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		defer rows.Close()
@@ -143,6 +152,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 				}
 				st := status.New(codes.Internal, err.Error())
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			qosList = append(qosList, qosName)
@@ -155,6 +165,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		baseQos := strings.Join(qosList, ",")
@@ -166,6 +177,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			}
 			st := status.New(codes.Internal, "Exec command failed.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		for _, p := range partitions {
@@ -178,6 +190,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 				}
 				st := status.New(codes.Internal, "Exec command failed.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
@@ -187,9 +200,11 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 				}
 				st := status.New(codes.Internal, "Exec command failed.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 		}
+		caller.Logger.Infof("CreateAccount sucess! account is: %v, owerUserId is: %v", in.AccountName, in.OwnerUserId)
 		return &pb.CreateAccountResponse{}, nil
 	}
 	errInfo := &errdetails.ErrorInfo{
@@ -198,6 +213,7 @@ func (s *ServerAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 	message := fmt.Sprintf("The %s is already exists.", in.AccountName)
 	st := status.New(codes.AlreadyExists, message)
 	st, _ = st.WithDetails(errInfo)
+	caller.Logger.Errorf("CreateAccount failed: %v", st.Err())
 	return nil, st.Err()
 }
 
@@ -219,6 +235,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		}
 		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -233,6 +250,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		message := fmt.Sprintf("%s does not exists.", in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
@@ -243,6 +261,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取计算分区AllowAccounts的值
@@ -256,6 +275,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		}
 		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if output == "ALL" {
@@ -267,6 +287,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		defer rows.Close()
@@ -278,6 +299,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 				}
 				st := status.New(codes.Internal, err.Error())
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 			acctList = append(acctList, assocAcctName)
@@ -289,6 +311,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		allowAcct := strings.Join(acctList, ",")
@@ -301,6 +324,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 				}
 				st := status.New(codes.Internal, "Exec command failed.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 		}
@@ -324,9 +348,11 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 			}
 			st := status.New(codes.Internal, "Exec command failed.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("BlockAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 	}
+	caller.Logger.Infof("BlockAccount sucess! account is: %v", in.AccountName)
 	return &pb.BlockAccountResponse{}, nil
 }
 
@@ -346,6 +372,7 @@ func (s *ServerAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		}
 		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("UnblockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 检查账户名是否在slurm中
@@ -358,6 +385,7 @@ func (s *ServerAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		message := fmt.Sprintf("%s does not exists.", in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("UnblockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
@@ -368,6 +396,7 @@ func (s *ServerAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("UnblockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
@@ -378,9 +407,11 @@ func (s *ServerAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 		}
 		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("UnblockAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if output == "ALL" {
+		caller.Logger.Infof("Accout %v is Unblocked!", in.AccountName)
 		return &pb.UnblockAccountResponse{}, nil
 	}
 	AllowAcctList := strings.Split(output, ",")
@@ -397,9 +428,11 @@ func (s *ServerAccount) UnblockAccount(ctx context.Context, in *pb.UnblockAccoun
 				}
 				st := status.New(codes.Internal, "Exec command failed.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("UnblockAccount failed: %v", st.Err())
 				return nil, st.Err()
 			}
 		}
+		caller.Logger.Infof("Accout %v Unblocked sucess!", in.AccountName)
 		return &pb.UnblockAccountResponse{}, nil
 	}
 	return &pb.UnblockAccountResponse{}, nil
@@ -427,6 +460,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -438,6 +472,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		acctList = append(acctList, acctName)
@@ -449,6 +484,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -460,6 +496,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	getAllowAcctCmd := fmt.Sprintf("scontrol show partition %s | grep AllowAccounts | awk '{print $2}' | awk -F '=' '{print $2}'", partitions[0])
@@ -470,6 +507,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 		}
 		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取和每个账户关联的用户的信息
@@ -483,6 +521,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		defer rows.Close()
@@ -511,6 +550,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetAllAccountsWithUsers failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		if output == "ALL" {
@@ -537,6 +577,7 @@ func (s *ServerAccount) GetAllAccountsWithUsers(ctx context.Context, in *pb.GetA
 			}
 		}
 	}
+	caller.Logger.Tracef("GetAllAccountsWithUsers: %v", acctInfo)
 	return &pb.GetAllAccountsWithUsersResponse{Accounts: acctInfo}, nil
 }
 
@@ -554,6 +595,7 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		}
 		st := status.New(codes.Internal, "The account contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("QueryAccountBlockStatus failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 检查账户名是否在slurm中
@@ -566,6 +608,7 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		message := fmt.Sprintf("%s does not exists.", in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("QueryAccountBlockStatus failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取系统中计算分区信息
@@ -576,6 +619,7 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		}
 		st := status.New(codes.Internal, "Exec command failed or don't set partitions.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("QueryAccountBlockStatus failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取系统中分区AllowAccounts信息
@@ -587,6 +631,7 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 		}
 		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("QueryAccountBlockStatus failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if output == "ALL" {
@@ -595,8 +640,10 @@ func (s *ServerAccount) QueryAccountBlockStatus(ctx context.Context, in *pb.Quer
 	acctList := strings.Split(output, ",")
 	index := arrays.ContainsString(acctList, in.AccountName)
 	if index == -1 {
+		caller.Logger.Infof("Account %v is Blocked", in.AccountName)
 		return &pb.QueryAccountBlockStatusResponse{Blocked: true}, nil
 	}
+	caller.Logger.Infof("Account %v is Unblocked", in.AccountName)
 	return &pb.QueryAccountBlockStatusResponse{Blocked: false}, nil
 }
 
@@ -615,6 +662,7 @@ func (s *ServerAccount) DeleteAccount(ctx context.Context, in *pb.DeleteAccountR
 		message := fmt.Sprintf("%s does not exists.", in.AccountName)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("DeleteAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 作业的判断
@@ -626,6 +674,7 @@ func (s *ServerAccount) DeleteAccount(ctx context.Context, in *pb.DeleteAccountR
 		}
 		st := status.New(codes.NotFound, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("DeleteAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if len(runningJobInfo) == 0 {
@@ -640,6 +689,7 @@ func (s *ServerAccount) DeleteAccount(ctx context.Context, in *pb.DeleteAccountR
 			}
 			st := status.New(codes.NotFound, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("DeleteAccount failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		return &pb.DeleteAccountResponse{}, nil
@@ -650,6 +700,7 @@ func (s *ServerAccount) DeleteAccount(ctx context.Context, in *pb.DeleteAccountR
 		}
 		st := status.New(codes.NotFound, "Exist running jobs.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("DeleteAccount failed: %v", st.Err())
 		return nil, st.Err()
 	}
 }

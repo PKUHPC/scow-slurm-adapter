@@ -20,6 +20,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type LogConfig struct {
+	Level string `yaml:"level"`
+}
+
 type MySQLConfig struct {
 	Host           string `yaml:"host"`
 	Port           int    `yaml:"port"`
@@ -49,6 +53,7 @@ type PartitionDesc struct {
 }
 
 type Config struct {
+	LogConfig     LogConfig       `yaml:"log"`
 	MySQLConfig   MySQLConfig     `yaml:"mysql"`
 	Service       Service         `yaml:"service"`
 	Slurm         Slurm           `yaml:"slurm"`

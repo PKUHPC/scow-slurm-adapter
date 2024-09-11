@@ -77,7 +77,16 @@ func initLogger() {
 	// 设置日志输出格式为JSON
 	Logger.SetFormatter(&LogFormatter{})
 	// 设置日志级别为Info
-	Logger.SetLevel(logrus.InfoLevel)
+	switch ConfigValue.LogConfig.Level {
+	case "info":
+		Logger.SetLevel(logrus.InfoLevel)
+	case "debug":
+		Logger.SetLevel(logrus.DebugLevel)
+	case "trace":
+		Logger.SetLevel(logrus.TraceLevel)
+	default:
+		Logger.SetLevel(logrus.InfoLevel)
+	}
 
 	// 创建一个 lumberjack.Logger，用于日志轮转配置
 	logFile := &lumberjack.Logger{
