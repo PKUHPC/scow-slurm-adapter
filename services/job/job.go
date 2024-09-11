@@ -38,6 +38,7 @@ func (s *ServerJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		}
 		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("CancelJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 判断用户是否存在
@@ -50,6 +51,7 @@ func (s *ServerJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		message := fmt.Sprintf("%s does not exists.", in.UserId)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("CancelJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 从squeue来获取对应的作业信息
@@ -61,6 +63,7 @@ func (s *ServerJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		}
 		st := status.New(codes.NotFound, "The job does not exist.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("CancelJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 取消作业
@@ -71,6 +74,7 @@ func (s *ServerJob) CancelJob(ctx context.Context, in *pb.CancelJobRequest) (*pb
 		}
 		st := status.New(codes.Unknown, response)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("CancelJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	return &pb.CancelJobResponse{}, nil
@@ -91,6 +95,7 @@ func (s *ServerJob) QueryJobTimeLimit(ctx context.Context, in *pb.QueryJobTimeLi
 		}
 		st := status.New(codes.NotFound, "The job does not exist.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("QueryJobTimeLimit failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	return &pb.QueryJobTimeLimitResponse{TimeLimitMinutes: timeLimit}, nil
@@ -108,6 +113,7 @@ func (s *ServerJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 		}
 		st := status.New(codes.NotFound, "The job does not exist.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("ChangeJobTimeLimit failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if in.DeltaMinutes >= 0 {
@@ -119,6 +125,7 @@ func (s *ServerJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("ChangeJobTimeLimit failed: %v", st.Err())
 			return nil, st.Err()
 		}
 	} else {
@@ -131,6 +138,7 @@ func (s *ServerJob) ChangeJobTimeLimit(ctx context.Context, in *pb.ChangeJobTime
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("ChangeJobTimeLimit failed: %v", st.Err())
 			return nil, st.Err()
 		}
 	}
@@ -187,6 +195,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		}
 		st := status.New(codes.NotFound, "The job does not exist.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 查询cputresId、memTresId、nodeTresId值
@@ -218,6 +227,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		}
 		st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -230,6 +240,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -241,6 +252,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 			return nil, st.Err()
 		}
 		gpuIdList = append(gpuIdList, gpuId)
@@ -252,6 +264,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -265,6 +278,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			}
 			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("Failed get job by id, error is: %v", st.Err())
 			return nil, st.Err()
 		}
 		reason = output
@@ -351,6 +365,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 			ElapsedSeconds:   &elapsedSeconds,
 			GpusAlloc:        &gpusAlloc,
 		}
+		caller.Logger.Infof("GetJobByIdResponse: %v", jobInfo)
 		return &pb.GetJobByIdResponse{Job: jobInfo}, nil
 	} else {
 		jobInfo := &pb.JobInfo{}
@@ -406,6 +421,7 @@ func (s *ServerJob) GetJobById(ctx context.Context, in *pb.GetJobByIdRequest) (*
 				jobInfo.EndTime = endTimeTimestamp
 			}
 		}
+		caller.Logger.Infof("GetJobByIdResponse: %v", jobInfo)
 		return &pb.GetJobByIdResponse{Job: jobInfo}, nil
 	}
 }
@@ -480,6 +496,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if len(pendingUserResult) != 0 {
@@ -512,6 +529,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		getFullCmdLine := getJobInfoCmdLine + " " + "--format='%b %a %A %C %D %j %l %m %M %P %q %S %T %u %V %Z %N' | tr '\n' ';'"
 
+		caller.Logger.Tracef("GetJobs get jobs command: %v", getFullCmdLine)
 		runningjobInfo, err := utils.RunCommand(getFullCmdLine)
 		if err != nil || utils.CheckSlurmStatus(runningjobInfo) {
 			errInfo := &errdetails.ErrorInfo{
@@ -519,6 +537,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 			st := status.New(codes.Internal, "slurmctld down.")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		// runningJobInfoList := strings.Split(runningjobInfo, ",")
@@ -648,6 +667,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			sortJobinfo := utils.SortJobInfo(sortKey, sortOrder, jobInfo)
 			return &pb.GetJobsResponse{Jobs: sortJobinfo}, nil
 		}
+		caller.Logger.Tracef("GetJobs GetJobsResponse is: %v", &pb.GetJobsResponse{Jobs: jobInfo})
 		return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 	}
 
@@ -660,6 +680,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -679,6 +700,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rowList.Close()
@@ -690,6 +712,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			}
 			st := status.New(codes.Internal, err.Error())
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		gpuIdList = append(gpuIdList, gpuId)
@@ -701,6 +724,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -740,6 +764,13 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 
 		baseSQL := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table WHERE ", clusterName)
+		databaseEncode := caller.ConfigValue.MySQLConfig.DatabaseEncode
+		caller.Logger.Tracef("Database encode is: %s", databaseEncode)
+		// 正常情况下，数据库编码格式是latin1，环境部署时config.yaml中databaseEncode也会配成latin1。 但是为了防止config.yaml中databaseEncode配成utf8，查询时需要做这样的转换。
+		if strings.Contains(databaseEncode, "utf8") {
+			baseSQL = fmt.Sprintf("SELECT account, id_user, cpus_req, CONVERT(CAST(job_name AS BINARY) USING utf8) AS job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, CONVERT(CAST(work_dir AS BINARY) USING utf8) AS work_dir, tres_alloc, tres_req FROM %s_job_table WHERE ", clusterName)
+		}
+
 		conditions := []string{}
 
 		if uidListString != "" {
@@ -778,7 +809,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			totalParams = append(totalParams, *in.Filter.JobId)
 		}
 		if in.Filter.JobName != nil {
-			conditions = append(conditions, "job_name = ?")
+			conditions = append(conditions, "CONVERT(CAST(job_name AS BINARY) USING utf8) = ?")
 			params = append(params, *in.Filter.JobName)
 			totalParams = append(totalParams, *in.Filter.JobName)
 		}
@@ -804,6 +835,13 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	} else {
 		// 没有搜索条件
 		baseSQL := fmt.Sprintf("SELECT account, id_user, cpus_req, job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, work_dir, tres_alloc, tres_req FROM %s_job_table ", clusterName)
+		databaseEncode := caller.ConfigValue.MySQLConfig.DatabaseEncode
+		caller.Logger.Tracef("Database encode is: %s", databaseEncode)
+		// 正常情况下，数据库编码格式是latin1，环境部署时config.yaml中databaseEncode也会配成latin1。 但是为了防止config.yaml中databaseEncode配成utf8，查询时需要做这样的转换。
+		if strings.Contains(databaseEncode, "utf8") {
+			baseSQL = fmt.Sprintf("SELECT account, id_user, cpus_req, CONVERT(CAST(job_name AS BINARY) USING utf8) AS job_name, id_job, id_qos, mem_req, nodelist, nodes_alloc, `partition`, state, timelimit, time_submit, time_start, time_end, time_suspended, gres_used, CONVERT(CAST(work_dir AS BINARY) USING utf8) AS work_dir, tres_alloc, tres_req FROM %s_job_table WHERE ", clusterName)
+		}
+
 		if in.PageInfo != nil {
 			// 分页的情况 没有搜索的情况
 			page := in.PageInfo.Page
@@ -823,6 +861,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 			jobSqlTotalConfig = fmt.Sprintf("SELECT count(*) FROM %s_job_table", clusterName) // 总的作业条数
 		}
 	}
+	caller.Logger.Tracef("GetJobs sql: %v, params: %v", jobSqlConfig, params)
 	rows, err := caller.DB.Query(jobSqlConfig, params...)
 	if err != nil {
 		errInfo := &errdetails.ErrorInfo{
@@ -830,6 +869,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	defer rows.Close()
@@ -842,6 +882,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, "slurmctld down.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs Failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	if len(pendingResult) != 0 {
@@ -850,8 +891,12 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 	for rows.Next() {
 		err := rows.Scan(&account, &idUser, &cpusReq, &jobName, &jobId, &idQos, &memReq, &nodeList, &nodesAlloc, &partition, &state, &timeLimitMinutes, &submitTime, &startTime, &endTime, &timeSuspended, &gresUsed, &workingDirectory, &tresAlloc, &tresReq)
 		if err != nil {
+			caller.Logger.Errorf("GetJobs Failed: %v ", err)
 			continue
 		}
+		caller.Logger.Tracef("GetJobs account: %v, idUser: %v, cpusReq: %v, jobName: %v, jobId: %v, idQos: %v, memReq: %v, nodeList: %v, nodesAlloc: %v, partition: %v, state: %v, "+
+			"timeLimitMinutes: %v, submitTime: %v, startTime: %v, endTime: %v, timeSuspended: %v, gresUsed: %v, workingDirectory: %v, tresAlloc: %v, tresReq: %v", account, idUser,
+			cpusReq, jobName, jobId, idQos, memReq, nodeList, nodesAlloc, partition, state, timeLimitMinutes, submitTime, startTime, endTime, timeSuspended, gresUsed, workingDirectory, tresAlloc, tresReq)
 		var (
 			elapsedSeconds     int64
 			reason             string
@@ -902,6 +947,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 					}
 					st := status.New(codes.Internal, "slurmctld down.")
 					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetJobs Failed: %v ", st.Err())
 					return nil, st.Err()
 				}
 
@@ -943,6 +989,7 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 				}
 				st := status.New(codes.Internal, "slurmctld down.")
 				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetJobs failed: %v", st.Err())
 				return nil, st.Err()
 			}
 
@@ -1077,14 +1124,17 @@ func (s *ServerJob) GetJobs(ctx context.Context, in *pb.GetJobsRequest) (*pb.Get
 		}
 		st := status.New(codes.Internal, err.Error())
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("GetJobs failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 获取总的页数逻辑
 	if jobSqlTotalConfig != "" {
 		caller.DB.QueryRow(jobSqlTotalConfig, totalParams...).Scan(&count)
 		totalCount = uint32(count)
+		caller.Logger.Tracef("GetJobs GetJobsResponse is: %v", &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount})
 		return &pb.GetJobsResponse{Jobs: jobInfo, TotalCount: &totalCount}, nil
 	}
+	caller.Logger.Tracef("GetJobs GetJobsResponse is: %v", &pb.GetJobsResponse{Jobs: jobInfo})
 	return &pb.GetJobsResponse{Jobs: jobInfo}, nil
 }
 
@@ -1103,6 +1153,7 @@ func (s *ServerJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		}
 		st := status.New(codes.Internal, "The account or username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 检查账户是否在slurm中
@@ -1115,6 +1166,7 @@ func (s *ServerJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		message := fmt.Sprintf("%s does not exists.", in.UserId)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -1181,11 +1233,13 @@ func (s *ServerJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		}
 		st := status.New(codes.Unknown, submitResponse)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	responseList := strings.Split(strings.TrimSpace(string(submitResponse)), " ")
 	jobIdString := responseList[len(responseList)-1]
 	jobId, _ := strconv.Atoi(jobIdString)
+	caller.Logger.Infof("SubmitJobResponse: %v", &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString})
 	return &pb.SubmitJobResponse{JobId: uint32(jobId), GeneratedScript: scriptString}, nil
 }
 
@@ -1202,6 +1256,7 @@ func (s *ServerJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 		}
 		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitScriptAsJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 	// 检查账户是否在slurm中
@@ -1214,6 +1269,7 @@ func (s *ServerJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 		message := fmt.Sprintf("%s does not exists.", in.UserId)
 		st := status.New(codes.NotFound, message)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitScriptAsJob failed: %v", st.Err())
 		return nil, st.Err()
 	}
 
@@ -1230,6 +1286,7 @@ func (s *ServerJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 			}
 			st := status.New(codes.Unknown, "ScriptFileFullPath not setting")
 			st, _ = st.WithDetails(errInfo)
+			caller.Logger.Errorf("SubmitScriptAsJob failed: %v", st.Err())
 			return nil, st.Err()
 		}
 		chdirString := fmt.Sprintf("#SBATCH --chdir=%s\n", *in.ScriptFileFullPath)
@@ -1247,12 +1304,14 @@ func (s *ServerJob) SubmitScriptAsJob(ctx context.Context, in *pb.SubmitScriptAs
 		}
 		st := status.New(codes.Unknown, submitResponse)
 		st, _ = st.WithDetails(errInfo)
+		caller.Logger.Errorf("SubmitScriptAsJob failed: %v", st.Err())
 		return nil, st.Err()
 	} else {
 		// 这里还要获取jobid
 		responseList := strings.Split(strings.TrimSpace(string(submitResponse)), " ")
 		jobIdString := responseList[len(responseList)-1]
 		jobId, _ := strconv.Atoi(jobIdString)
+		caller.Logger.Infof("SubmitJobResponse: %v", &pb.SubmitScriptAsJobResponse{JobId: uint32(jobId)})
 		return &pb.SubmitScriptAsJobResponse{JobId: uint32(jobId)}, nil
 	}
 }
