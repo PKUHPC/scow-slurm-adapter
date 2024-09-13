@@ -937,11 +937,17 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			}
 			resultList := strings.Split(partitionElement, " ")
 			if len(resultList) < 7 {
+				caller.Logger.Infof("Invalid partitionElement: %s", partitionElement)
 				continue
 			}
 
 			state = resultList[4]
 			nodeInfo := strings.Split(resultList[6], "/")
+			if len(nodeInfo) < 4 {
+				caller.Logger.Infof("Invalid nodeInfo: %s", resultList[6])
+				continue
+			}
+
 			runningNodesTmp, _ := strconv.Atoi(nodeInfo[0])
 			runningNodes = runningNodes + runningNodesTmp
 			idleNodesTmp, _ := strconv.Atoi(nodeInfo[1])
