@@ -936,6 +936,10 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				continue
 			}
 			resultList := strings.Split(partitionElement, " ")
+			if len(resultList) < 7 {
+				continue
+			}
+
 			state = resultList[4]
 			nodeInfo := strings.Split(resultList[6], "/")
 			runningNodesTmp, _ := strconv.Atoi(nodeInfo[0])
