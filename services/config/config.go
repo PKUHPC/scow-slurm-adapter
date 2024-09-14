@@ -970,7 +970,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			noAvailableNodes int
 		)
 		getPartitionStatusCmd := fmt.Sprintf("sinfo -p %s --noheader", v)
-		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'| tr '\n' ','"
+		fullCmd := getPartitionStatusCmd + " --format='%P %c %C %G %a %D %F'"
 		result, err := utils.RunCommand(fullCmd) // 状态
 		if err != nil || utils.CheckSlurmStatus(result) {
 			errInfo := &errdetails.ErrorInfo{
@@ -982,16 +982,25 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			return nil, st.Err()
 		}
 
-		partitionElements := strings.Split(result, ",")
+		partitionElements := strings.Split(result, "\n")
 		for _, partitionElement := range partitionElements {
-			// 移除可能存在的前导空格
 			partitionElement = strings.TrimSpace(partitionElement)
 			if partitionElement == "" {
 				continue
 			}
 			resultList := strings.Split(partitionElement, " ")
+			if len(resultList) < 7 {
+				caller.Logger.Infof("Invalid partitionElement: %s", partitionElement)
+				continue
+			}
+
 			state = resultList[4]
 			nodeInfo := strings.Split(resultList[6], "/")
+			if len(nodeInfo) < 4 {
+				caller.Logger.Infof("Invalid nodeInfo: %s", resultList[6])
+				continue
+			}
+
 			runningNodesTmp, _ := strconv.Atoi(nodeInfo[0])
 			runningNodes = runningNodes + runningNodesTmp
 			idleNodesTmp, _ := strconv.Atoi(nodeInfo[1])
