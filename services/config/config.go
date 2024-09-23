@@ -257,20 +257,23 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				nodeMem, _ := strconv.Atoi(memOutput)
 				totalMemInt = nodeMem * totalNodeNumInt
 			} else {
-				getMemCmd := fmt.Sprintf("scontrol show node=%s | grep RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
-				memOutput, err := utils.RunCommand(getMemCmd)
-				if err != nil || utils.CheckSlurmStatus(memOutput) {
-					errInfo := &errdetails.ErrorInfo{
-						Reason: "COMMAND_EXEC_FAILED",
+				// 如果nodeArray[0]是(null) 则跳过
+				if nodeArray[0] != "(null)" {
+					getMemCmd := fmt.Sprintf("scontrol show node=%s | grep RealMemory=| awk '{print $1}' | awk -F'=' '{print $2}'", nodeArray[0])
+					memOutput, err := utils.RunCommand(getMemCmd)
+					if err != nil || utils.CheckSlurmStatus(memOutput) {
+						errInfo := &errdetails.ErrorInfo{
+							Reason: "COMMAND_EXEC_FAILED",
+						}
+						st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+						st, _ = st.WithDetails(errInfo)
+						caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
+						return nil, st.Err()
 					}
-					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
-					st, _ = st.WithDetails(errInfo)
-					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
-					return nil, st.Err()
-				}
 
-				nodeMem, _ := strconv.Atoi(memOutput)
-				totalMemInt = nodeMem * totalNodeNumInt
+					nodeMem, _ := strconv.Atoi(memOutput)
+					totalMemInt = nodeMem * totalNodeNumInt
+				}
 			}
 		} else {
 			errInfo := &errdetails.ErrorInfo{
@@ -329,22 +332,26 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
 			}
 		} else {
-			getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
-			gpusOutput, err := utils.RunCommand(getGpusCmd)
-			if err != nil || utils.CheckSlurmStatus(gpusOutput) {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "COMMAND_EXEC_FAILED",
-				}
-				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
-				st, _ = st.WithDetails(errInfo)
-				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
-				return nil, st.Err()
-			}
-			if gpusOutput == "Gres=(null)" {
+			if nodeArray[0] == "(null)" {
 				totalGpus = 0
 			} else {
-				perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
-				totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
+				getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
+				gpusOutput, err := utils.RunCommand(getGpusCmd)
+				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "COMMAND_EXEC_FAILED",
+					}
+					st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
+					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
+					return nil, st.Err()
+				}
+				if gpusOutput == "Gres=(null)" {
+					totalGpus = 0
+				} else {
+					perNodeGpuNum, _ := strconv.Atoi(gpusOutput)
+					totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
+				}
 			}
 		}
 		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
