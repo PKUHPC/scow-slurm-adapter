@@ -2074,7 +2074,6 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			noAvailableCores = noAvailableCores + noAvailableCoresTmp
 			// fmt.Println("Partition Element:", partitionElement)
 			gpuInfo := resultList[3] // 这是gpu的信息
-			noAvailableGpus = 0
 			if gpuInfo == "(null)" {
 				runningGpus = 0
 				idleGpus = 0
@@ -2085,7 +2084,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				singerNodeGpus := singerNodeGpusInfo[len(singerNodeGpusInfo)-1] // 获取最后一个元素
 				singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
 				noAvailableGpus = noAvailableGpus + noAvailableNodes*singerNodeGpusInt
-				totalGpus = totalGpus + singerNodeGpusInt*totalNodes
+				totalGpus = singerNodeGpusInt * totalNodes
 			}
 		}
 
