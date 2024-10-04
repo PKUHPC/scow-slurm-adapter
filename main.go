@@ -2084,7 +2084,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				singerNodeGpus := singerNodeGpusInfo[len(singerNodeGpusInfo)-1] // 获取最后一个元素
 				singerNodeGpusInt, _ := strconv.Atoi(singerNodeGpus)
 				noAvailableGpus = noAvailableGpus + noAvailableNodes*singerNodeGpusInt
-				totalGpus = singerNodeGpusInt * totalNodes
+				totalGpus = totalGpus + singerNodeGpusInt*totalNodes
 			}
 		}
 
