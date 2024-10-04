@@ -169,26 +169,26 @@ func (s *serverUser) AddUserToAccount(ctx context.Context, in *pb.AddUserToAccou
 	if err != nil {
 		// 0907 注释
 		//for _, v := range partitions {
-			createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' account='%s'", in.UserId, in.AccountName)
-			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
-			retcode01 := utils.ExecuteShellCommand(createUserCmd)
-			if retcode01 != 0 {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "EXEC_COMMAND_FAILED",
-				}
-				st := status.New(codes.AlreadyExists, "Command exec fail.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
+		createUserCmd := fmt.Sprintf("sacctmgr -i create user name='%s' account='%s'", in.UserId, in.AccountName)
+		modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos='%s' DefaultQOS='%s'", in.UserId, baseQos, defaultQos)
+		retcode01 := utils.ExecuteShellCommand(createUserCmd)
+		if retcode01 != 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "EXEC_COMMAND_FAILED",
 			}
-			retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
-			if retcode02 != 0 {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "EXEC_COMMAND_FAILED",
-				}
-				st := status.New(codes.AlreadyExists, "Command exec fail.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
+			st := status.New(codes.AlreadyExists, "Command exec fail.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+		retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
+		if retcode02 != 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "EXEC_COMMAND_FAILED",
 			}
+			st := status.New(codes.AlreadyExists, "Command exec fail.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
 		//}
 
 		// var wg sync.WaitGroup
@@ -829,28 +829,28 @@ func (s *serverAccount) CreateAccount(ctx context.Context, in *pb.CreateAccountR
 			return nil, st.Err()
 		}
 		//for _, p := range partitions {
-			createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s account=%s", in.OwnerUserId, in.AccountName)
-			modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, defaultQos)
-			retcode01 := utils.ExecuteShellCommand(createUserCmd)
-			if retcode01 != 0 {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "COMMAND_EXEC_FAILED",
-				}
-				st := status.New(codes.Internal, "Exec command failed.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
+		createUserCmd := fmt.Sprintf("sacctmgr -i create user name=%s account=%s", in.OwnerUserId, in.AccountName)
+		modifyUserCmd := fmt.Sprintf("sacctmgr -i modify user %s set qos=%s DefaultQOS=%s", in.OwnerUserId, baseQos, defaultQos)
+		retcode01 := utils.ExecuteShellCommand(createUserCmd)
+		if retcode01 != 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
 			}
-			retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
-			if retcode02 != 0 {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "COMMAND_EXEC_FAILED",
-				}
-				st := status.New(codes.Internal, "Exec command failed.")
-				st, _ = st.WithDetails(errInfo)
-				return nil, st.Err()
-			}
+			st := status.New(codes.Internal, "Exec command failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
 		}
-		return &pb.CreateAccountResponse{}, nil
+		retcode02 := utils.ExecuteShellCommand(modifyUserCmd)
+		if retcode02 != 0 {
+			errInfo := &errdetails.ErrorInfo{
+				Reason: "COMMAND_EXEC_FAILED",
+			}
+			st := status.New(codes.Internal, "Exec command failed.")
+			st, _ = st.WithDetails(errInfo)
+			return nil, st.Err()
+		}
+	}
+	return &pb.CreateAccountResponse{}, nil
 	//}
 
 	errInfo := &errdetails.ErrorInfo{
@@ -2209,7 +2209,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				// 获取正在使用的GPU卡数
 				useGpuCardstr := fmt.Sprintf("squeue -p %s -t r ", v)
 				//useGpuCardCmd := useGpuCardstr + " " + " --format='%b' --noheader | awk -F':' '{print $3}' | awk '{sum+=$1} END {print sum}'"
-				useGpuCardCmd := useGpuCardstr + " " + " --format='%b %D'|awk -F: '{print $NF}'|awk '{ sum += $1 * $2 } END { print sum }'"
+				useGpuCardCmd := useGpuCardstr + " " + " --format='%b %D' --noheader |awk -F: '{print $NF}'|awk '{ sum += $1 * $2 } END { print sum }'"
 				useGpuCardResult, err := utils.RunCommand(useGpuCardCmd)
 				if err != nil || utils.CheckSlurmStatus(useGpuCardResult) {
 					errInfo := &errdetails.ErrorInfo{
