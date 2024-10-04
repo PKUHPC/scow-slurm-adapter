@@ -2074,6 +2074,7 @@ func (s *serverConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			noAvailableCores = noAvailableCores + noAvailableCoresTmp
 			// fmt.Println("Partition Element:", partitionElement)
 			gpuInfo := resultList[3] // 这是gpu的信息
+			noAvailableGpus = 0
 			if gpuInfo == "(null)" {
 				runningGpus = 0
 				idleGpus = 0
