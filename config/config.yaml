@@ -11,9 +11,9 @@ mysql:
   clustername: cluster
   databaseencode: latin1
 
-# 服务端口设置
+# 服务地址设置
 service:
-  port: 8972
+  addr: 0.0.0.0:8972
 
 # slurm 默认Qos设置
 slurm:

@@ -22,8 +22,7 @@ import (
 func main() {
 	os.Setenv("SLURM_TIME_FORMAT", "standard") // 新加slurm环境变量
 	// 启动服务
-	portString := fmt.Sprintf(":%d", caller.ConfigValue.Service.Port)
-	lis, err := net.Listen("tcp", portString)
+	lis, err := net.Listen("tcp", caller.ConfigValue.Service.Addr)
 	if err != nil {
 		fmt.Printf("failed to listen: %v", err)
 		return
