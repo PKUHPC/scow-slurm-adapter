@@ -35,7 +35,7 @@ type MySQLConfig struct {
 }
 
 type Service struct {
-	Port int `yaml:"port"`
+	Addr string `yaml:"addr"`
 }
 
 type Slurm struct {
