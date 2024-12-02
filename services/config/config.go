@@ -88,7 +88,6 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			totalGpus    uint32
 			comment      string
 			qos          []string
-			totalMems    int
 			totalCpus    string
 			totalMemsTmp string
 			totalNodes   string
@@ -173,20 +172,16 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 			}
 
-			if strings.Contains(totalMemsTmp, "M") {
-				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
-				totalMems = totalMemsInt
-			} else if strings.Contains(totalMemsTmp, "G") {
-				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "G")[0])
-				totalMems = totalMemsInt * 1024
-			} else if strings.Contains(totalMemsTmp, "T") {
-				totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "T")[0])
-				totalMems = totalMemsInt * 1024 * 1024
+			totalMemInt, err = utils.ConvertMemory(totalMemsTmp)
+			if err != nil {
+				errInfo := &errdetails.ErrorInfo{
+					Reason: "CONVERT_MEMORY_FAILED",
+				}
+				st := status.New(codes.Internal, "convert memory error")
+				st, _ = st.WithDetails(errInfo)
+				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
+				return nil, st.Err()
 			}
-
-			// 将字符串转换为int
-			totalCpuInt, _ = strconv.Atoi(totalCpus)
-			totalMemInt = totalMems
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 		} else if err != nil && !utils.CheckSlurmStatus(output) {
 			// 获取总cpu、总内存、总节点数
@@ -519,7 +514,6 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 	}
 	for _, partition := range partitions {
 		var (
-			totalMems int
 			totalGpus uint32
 			comment   string
 			qos       []string
@@ -587,17 +581,16 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					return nil, st.Err()
 				}
 
-				if strings.Contains(totalMemsTmp, "M") {
-					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "M")[0])
-					totalMems = totalMemsInt
-				} else if strings.Contains(totalMemsTmp, "G") {
-					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "G")[0])
-					totalMems = totalMemsInt * 1024
-				} else if strings.Contains(totalMemsTmp, "T") {
-					totalMemsInt, _ := strconv.Atoi(strings.Split(totalMemsTmp, "T")[0])
-					totalMems = totalMemsInt * 1024 * 1024
+				totalMemInt, err = utils.ConvertMemory(totalMemsTmp)
+				if err != nil {
+					errInfo := &errdetails.ErrorInfo{
+						Reason: "CONVERT_MEMORY_FAILED",
+					}
+					st := status.New(codes.Internal, "convert memory error")
+					st, _ = st.WithDetails(errInfo)
+					caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
+					return nil, st.Err()
 				}
-				totalMemInt = totalMems
 			} else {
 				// 取节点名，默认取第一个元素，在判断有没有[特殊符合
 				getPartitionNodeNameCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' Nodes=' | awk -F'=' '{print $2}'", partition)
