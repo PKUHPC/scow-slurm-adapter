@@ -598,3 +598,44 @@ func ExtractValue(input, key string) string {
 	}
 	return ""
 }
+
+func ConvertMemory(memoryString string) (int, error) {
+	// 使用正则表达式提取数字部分和单位
+	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)([A-Z]+)$`)
+	matches := re.FindStringSubmatch(memoryString)
+
+	if len(matches) != 3 {
+		return 0, fmt.Errorf("illegal memory format")
+	}
+
+	// 提取数字部分
+	memorySizeStr := matches[1]
+
+	// 提取单位
+	unit := matches[2]
+
+	// 将字符串转换为float64
+	memorySize, err := strconv.ParseFloat(memorySizeStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("convert err: %v", err)
+	}
+
+	// 将TB转换为MB，1TB = 1024 * 1024MB
+	const bytesInMB = 1024 * 1024
+	var memorySizeMB float64
+
+	switch unit {
+	case "P":
+		memorySizeMB = memorySize * bytesInMB * 1024
+	case "T":
+		memorySizeMB = memorySize * bytesInMB
+	case "G":
+		memorySizeMB = memorySize * bytesInMB / 1024
+	case "M":
+		memorySizeMB = memorySize
+	default:
+		return 0, fmt.Errorf("unknown memory unit")
+	}
+
+	return int(memorySizeMB), nil
+}
