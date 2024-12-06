@@ -79,10 +79,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 		caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 		return nil, st.Err()
 	}
-	// fmt.Println(caller.ConfigValue.PartitionDesc, 112222)
-	// for _, value := range caller.ConfigValue.PartitionDesc {
-	// 	fmt.Println(value.Desc, value.Name)
-	// }
+
 	for _, partition := range partitions {
 		var (
 			totalGpus    uint32
@@ -182,6 +179,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
 				return nil, st.Err()
 			}
+			totalCpuInt, _ = strconv.Atoi(totalCpus)
 			totalNodeNumInt, _ = strconv.Atoi(totalNodes)
 		} else if err != nil && !utils.CheckSlurmStatus(output) {
 			// 获取总cpu、总内存、总节点数
@@ -349,18 +347,6 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				}
 			}
 		}
-		getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
-		qosOutput, err := utils.RunCommand(getPartitionQosCmd)
-		if err != nil || utils.CheckSlurmStatus(qosOutput) {
-			errInfo := &errdetails.ErrorInfo{
-				Reason: "COMMAND_EXEC_FAILED",
-			}
-			st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
-			st, _ = st.WithDetails(errInfo)
-			caller.Logger.Errorf("GetClusterConfig failed: %v", st.Err())
-			return nil, st.Err()
-		}
-		qosArray := strings.Split(qosOutput, "=")
 
 		// 获取AllowQos
 		getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
@@ -376,15 +362,12 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			return nil, st.Err()
 		}
 
-		if qosArray[len(qosArray)-1] != "N/A" {
-			qos = append(qos, qosArray[len(qosArray)-1])
+		if allowQosOutput == "ALL" {
+			qos = qosList
 		} else {
-			if allowQosOutput == "ALL" {
-				qos = qosList
-			} else {
-				qos = strings.Split(allowQosOutput, ",")
-			}
+			qos = strings.Split(allowQosOutput, ",")
 		}
+
 		// 从配置文件中读取计算分区的描述字段
 		for _, value := range caller.ConfigValue.PartitionDesc {
 			if value.Name == partition {
@@ -427,7 +410,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 		}
 		st := status.New(codes.Internal, "The username contains illegal characters.")
 		st, _ = st.WithDetails(errInfo)
-		caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
+		caller.Logger.Errorf("GetAvailablePartitions failed: username: %v contains illegal characters", in.UserId)
 		return nil, st.Err()
 	}
 	// 获取集群名
@@ -742,18 +725,6 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
 				}
 			}
-			getPartitionQosCmd := fmt.Sprintf("scontrol show partition=%s | grep -i ' QoS=' | awk '{print $3}'", partition)
-			qosOutput, err := utils.RunCommand(getPartitionQosCmd)
-			if err != nil || utils.CheckSlurmStatus(qosOutput) {
-				errInfo := &errdetails.ErrorInfo{
-					Reason: "COMMAND_EXEC_FAILED",
-				}
-				st := status.New(codes.Internal, "Exec command failed or slurmctld down.")
-				st, _ = st.WithDetails(errInfo)
-				caller.Logger.Errorf("GetAvailablePartitions failed: %v", st.Err())
-				return nil, st.Err()
-			}
-			qosArray := strings.Split(qosOutput, "=")
 
 			// 获取AllowQos
 			getPartitionAllowQosCmd := fmt.Sprintf("scontrol show partition=%s | grep AllowQos | awk '{print $3}'| awk -F'=' '{print $2}'", partition)
@@ -769,15 +740,12 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 				return nil, st.Err()
 			}
 
-			if qosArray[len(qosArray)-1] != "N/A" {
-				qos = append(qos, qosArray[len(qosArray)-1])
+			if allowQosOutput == "ALL" {
+				qos = qosList
 			} else {
-				if allowQosOutput == "ALL" {
-					qos = qosList
-				} else {
-					qos = strings.Split(allowQosOutput, ",")
-				}
+				qos = strings.Split(allowQosOutput, ",")
 			}
+
 			// 加一个comment的描述
 			for _, value := range caller.ConfigValue.PartitionDesc {
 				if value.Name == partition {
