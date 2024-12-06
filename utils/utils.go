@@ -339,7 +339,7 @@ func GetUserNameByUid(uid int) (string, error) {
 // 判断字符串是否为合法用户名或账号名
 func CheckAccountOrUserStrings(s string) bool {
 	// 允许小写字母、数字、下划线、连字符, 不以连字符开头
-	pattern := "^(?!-)[a-z0-9_-]+$"
+	pattern := "^[^-][a-z0-9_-]+$"
 	// 编译正则表达式
 	reg := regexp.MustCompile(pattern)
 	// 使用正则表达式判断字符串是否符合模式
