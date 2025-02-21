@@ -15,10 +15,10 @@
 #### **1.2.1 准备一台能连网的服务器或者虚拟机，在准备的服务器或虚拟机上安装go语言、配置go相关环境变量**
 
 ```bash
-# 下载go语言安装包，安装go
+# 下载go语言安装包，安装go(本文以1.22版本为例)
 cd download/
-wget https://golang.google.cn/dl/go1.19.7.linux-amd64.tar.gz
-tar -C /usr/local -xzf go1.19.7.linux-amd64.tar.gz
+wget https://golang.google.cn/dl/go1.22.0.linux-amd64.tar.gz
+tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
 
 # 在/etc/profile中设置环境变量
 export GOROOT=/usr/local/go
@@ -38,30 +38,13 @@ go env -w GOPROXY=https://goproxy.cn,direct
 go env -w GO111MODULE=on
 ```
 
-#### **1.2.2 在准备好的服务器或虚拟机上安装buf**
-```bash
-# 执行下面命令完成安装
-GO111MODULE=on GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@v1.23.1
-```
-
-#### **1.2.3 在准备好的服务器或虚拟机上拉取Slurm适配器代码**
+#### **1.2.2 在准备好的服务器或虚拟机上拉取Slurm适配器代码**
 ```bash
 [root@manage01]# cd /root    # 将slurm适配器代码放在root目录下
 [root@manage01]# git clone https://github.com/PKUHPC/scow-slurm-adapter.git  #克隆代码
 ```
 
-
-#### **1.2.4 生成proto文件**
-```bash
-# 在scow-slurm-adapter目录下执行下面命令
-[root@manage01 scow-slurm-adapter]# make protos
-
-# 执行完上面的命令后会在当前目录下生成gen目录和相关的proto文件
-[root@manage01 scow-slurm-adapter]# ls gen/* 
-account_grpc.pb.go  account.pb.go  config_grpc.pb.go  config.pb.go  job_grpc.pb.go  job.pb.go  user_grpc.pb.go  user.pb.go
-```
-
-#### **1.2.5 编译项目**
+#### **1.2.3 编译项目**
 ```bash
 # 在代码根目录下执行make build生成二进制文件(scow-slurm-adapter-amd64)
 [root@manage01 scow-slurm-adapter]# make build 
@@ -97,7 +80,7 @@ mysql:
 
 # 服务端口设置
 service:
-  port: 8999                                              # 指定slurm适配器服务启动端口
+  addr: 0.0.0.0:8972                                           # 指定slurm适配器服务启动地址（地址和端口可根据需要修改）
 
 # slurm 默认Qos设置
 slurm:
@@ -151,19 +134,4 @@ less /adapter/server.log
     ```bash
     nohup ./scow-slurm-adapter-amd64 > server.log 2>&1 &
     ```
-
-### **4.2 更新代码自己编译生成最新的Slurm适配器二进制文件**
-* 更新代码
-  ```bash
-  # 在2.1节中Slurm适配器代码目录中执行git pull 拉取最新代码
-  [root@manage01 scow-slurm-adapter]# git pull  #拉取最新代码
-  ```
-* slurm 管理节点上停止Slurm适配器进程
-  ```bash
-  # slurm 管理节点上执行以下命令, 停止Slurm 适配器进程
-  ps -ef | grep [s]cow-slurm-adapter-amd64 | awk '{print $2}' | xargs kill -9
-  ```
-* 编译节点上重新执行本文档2.2节内容，生成新的proto文件
-* 编译节点上重新执行本文档2.3节内容，编译生成新的适配器可执行程序
-* 执行本文档第3章的内容，完成Slurm适配器的部署更新
 
