@@ -1215,13 +1215,8 @@ func (s *ServerJob) SubmitJob(ctx context.Context, in *pb.SubmitJobRequest) (*pb
 		}
 	}
 
-	if !isAbsolute { // 提交的是交互式作业
-		modulepathString := fmt.Sprintf("source %s", modulepath) // 改成从配置文件中获取profile文件路径信息
-		scriptString += "\n" + modulepathString + "\n"
-	} else {
-		scriptString += "\n"
-	}
-	// scriptString += "\n" + "source /lustre/software/module/5.2.0/init/profile.sh\n"
+	modulepathString := fmt.Sprintf("source %s", modulepath) // 改成从配置文件中获取profile文件路径信息
+	scriptString += "\n" + modulepathString + "\n"
 
 	scriptString += in.Script
 	// 提交作业

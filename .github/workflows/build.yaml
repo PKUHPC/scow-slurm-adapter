@@ -39,7 +39,7 @@ jobs:
           make ARCH=arm64 build
 
       - name: Upload binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: scow-slurm-adapter
           path: |
