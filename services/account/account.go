@@ -279,7 +279,7 @@ func (s *ServerAccount) BlockAccount(ctx context.Context, in *pb.BlockAccountReq
 		return nil, st.Err()
 	}
 	if output == "ALL" {
-		acctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE deleted = 0 AND acct != ?", clusterName)
+		acctSqlConfig := fmt.Sprintf("SELECT DISTINCT acct FROM %s_assoc_table WHERE deleted = 0 AND `partition` <> '' AND acct != ?", clusterName)
 		rows, err := caller.DB.Query(acctSqlConfig, in.AccountName)
 		if err != nil {
 			errInfo := &errdetails.ErrorInfo{
