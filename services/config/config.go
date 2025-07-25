@@ -306,7 +306,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 				return nil, st.Err()
 			}
 			nodeName := strings.Join(strings.Split(nodeNameOutput, " "), "")
-			gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
+			gpusCmd := fmt.Sprintf(`scontrol show node=%s | grep ' Gres=' | awk -F':' '{if ($NF ~ /^[0-9]+$/) {print $NF} else {gsub(/[^0-9]/, "", $(NF-1)); print $(NF-1)}}'`, nodeName)
 			gpusOutput, err := utils.RunCommand(gpusCmd)
 			if err != nil || utils.CheckSlurmStatus(gpusOutput) {
 				errInfo := &errdetails.ErrorInfo{
@@ -328,7 +328,7 @@ func (s *ServerConfig) GetClusterConfig(ctx context.Context, in *pb.GetClusterCo
 			if nodeArray[0] == "(null)" {
 				totalGpus = 0
 			} else {
-				getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
+				getGpusCmd := fmt.Sprintf(`scontrol show node=%s | grep ' Gres=' | awk -F':' '{if ($NF ~ /^[0-9]+$/) {print $NF} else {gsub(/[^0-9]/, "", $(NF-1)); print $(NF-1)}}'`, nodeArray[0])
 				gpusOutput, err := utils.RunCommand(getGpusCmd)
 				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
 					errInfo := &errdetails.ErrorInfo{
@@ -688,7 +688,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					return nil, st.Err()
 				}
 				nodeName := nodeNamePrefix + nodeNameSuffix
-				gpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeName)
+				gpusCmd := fmt.Sprintf(`scontrol show node=%s | grep ' Gres=' | awk -F':' '{if ($NF ~ /^[0-9]+$/) {print $NF} else {gsub(/[^0-9]/, "", $(NF-1)); print $(NF-1)}}'`, nodeName)
 				gpusOutput, err := utils.RunCommand(gpusCmd)
 				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
 					errInfo := &errdetails.ErrorInfo{
@@ -707,7 +707,7 @@ func (s *ServerConfig) GetAvailablePartitions(ctx context.Context, in *pb.GetAva
 					totalGpus = uint32(perNodeGpuNum) * uint32(totalNodeNumInt)
 				}
 			} else {
-				getGpusCmd := fmt.Sprintf("scontrol show node=%s| grep ' Gres=' | awk -F':' '{print $NF}'", nodeArray[0])
+				getGpusCmd := fmt.Sprintf(`scontrol show node=%s | grep ' Gres=' | awk -F':' '{if ($NF ~ /^[0-9]+$/) {print $NF} else {gsub(/[^0-9]/, "", $(NF-1)); print $(NF-1)}}'`, nodeArray[0])
 				gpusOutput, err := utils.RunCommand(getGpusCmd)
 				if err != nil || utils.CheckSlurmStatus(gpusOutput) {
 					errInfo := &errdetails.ErrorInfo{
@@ -804,7 +804,8 @@ func extractNodeInfo(info string) *pb.NodeInfo {
 	if totalGpus == "(null)" {
 		totalGpusInt = 0
 	} else {
-		totalGpusStr := strings.Split(totalGpus, ":")[1]
+		totalGpusStrWithBrace := strings.Split(totalGpus, ":")[1]
+		totalGpusStr := strings.Split(totalGpusStrWithBrace, "(")[0]
 		totalGpusInt, _ = strconv.Atoi(totalGpusStr)
 	}
 	allocGpus := utils.ExtractValue(info, "AllocTRES")
@@ -1007,7 +1008,8 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 			idleCores = idleCores + idleCoresTmp
 			noAvailableCoresTmp, _ := strconv.Atoi(coresInfo[2])
 			noAvailableCores = noAvailableCores + noAvailableCoresTmp
-			gpuInfo := resultList[3] // 这是gpu的信息
+			gpuInfoWithSocket := strings.Split(resultList[3], "(")
+			gpuInfo := gpuInfoWithSocket[0] // 这是gpu的信息
 			if gpuInfo == "(null)" {
 				runningGpus = 0
 				idleGpus = 0
@@ -1137,7 +1139,7 @@ func (s *ServerConfig) GetClusterInfo(ctx context.Context, in *pb.GetClusterInfo
 				idleGpus = totalGpus - runningGpus - noAvailableGpus
 			} else {
 				runningGpus = 0
-				idleGpus = totalGpus
+				idleGpus = totalGpus - noAvailableGpus
 			}
 			resultRatio := float64(runningNodes) / float64(totalNodes)
 			percentage := int(resultRatio * 100) // 保留整数
